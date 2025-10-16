@@ -24,7 +24,7 @@ This bot automatically fetches financial data for companies in the WIG30 or WIG2
 ## Installation
 
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.8 or higher (recommended: 3.9+ for best performance)
 
 ### Setup Steps
 1. Clone or download this repository
@@ -178,6 +178,99 @@ Potential improvements for future versions:
 ## Language Note
 
 This bot was developed for analyzing Polish stock market data, but can be easily adapted for other markets by updating the ticker list in the configuration file.
+
+---
+
+# Wersja Polska (Polish Version)
+
+## Bot Skanera Rentowności i Wyceny WIG30/WIG20
+
+Bot Python, który analizuje rentowność i wycenę spółek z indeksów WIG30 i WIG20, wykorzystując wskaźniki fundamentalne z Yahoo Finance.
+
+## Opis
+
+Ten bot automatycznie pobiera dane finansowe spółek z indeksu WIG30 lub WIG20 (główne indeksy GPW), oblicza Rentowność Kapitału Własnego (ROE) oraz wskaźnik Cena/Zysk (C/Z), a następnie stosuje podwójne filtrowanie do identyfikacji fundamentalnie mocnych i niedowartościowanych spółek. Bot filtruje spółki na podstawie dodatniego zysku netto, ROE ≥ 10% (rentowność) ORAZ C/Z ≤ 15 (wycena), a następnie wyświetla top 10 ranking posortowany według ROE. Wyniki są prezentowane w konsoli z kompleksowym formatowaniem pokazującym ROE, wskaźniki C/Z, i eksportowane do wielu plików CSV do dalszej analizy.
+
+## Funkcje
+
+- **Automatyczne Pobieranie Danych**: Pobiera kwartalne sprawozdania finansowe, bilanse i aktualne dane rynkowe z Yahoo Finance
+- **Obliczanie ROE**: Oblicza Rentowność Kapitału Własnego (ROE) do oceny rentowności
+- **Analiza Wskaźnika C/Z**: Oblicza wskaźnik Cena/Zysk do oceny wyceny
+- **Strategia Podwójnego Filtrowania**: Łączy ROE ≥ 10% (rentowność) ORAZ C/Z ≤ 15 (wycena) dla inwestowania wartościowego
+- **Elastyczność Indeksu**: Wspiera analizę zarówno WIG30 (30 spółek) jak i WIG20 (20 spółek blue-chip)
+- **Kompleksowa Analiza**: Analizuje wszystkie spółki z wybranego indeksu w jednym uruchomieniu
+- **Inteligentne Filtrowanie**: Identyfikuje spółki z dodatnim zyskiem netto i stosuje kryteria fundamentalne
+- **Sortowanie według ROE**: Automatycznie sortuje wyniki według ROE dla identyfikacji najbardziej kapitałowo wydajnych spółek
+- **Zwiększony Wyjście Konsoli**: Wyświetla top 10 ranking z emoji, wskaźnikami ROE, C/Z, zyskami netto i nazwami spółek
+- **Wiele Eksportów CSV**: Generuje przefiltrowane wyniki, wszystkie rentowne spółki i pliki w formacie legacy
+- **Obsługa Błędów**: Elegancko radzi sobie z brakującymi danymi i błędami API
+- **Modularny Projekt**: Czyste rozdzielenie konfiguracji, logiki analizy i głównego wykonania
+
+## Instalacja
+
+### Wymagania
+- Python 3.8 lub wyższy (zalecany: 3.9+ dla najlepszej wydajności)
+
+### Kroki Instalacji
+1. Sklonuj lub pobierz to repozytorium
+2. Zainstaluj wymagane zależności:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## Użycie
+
+### Uruchomienie Bota
+Wykonaj główny skrypt:
+```bash
+python wig30_bot.py
+```
+
+### Oczekiwane Wyjście
+Bot wyświetli:
+1. Postęp dla każdej analizowanej spółki
+2. Podsumowanie z łączną liczbą przeanalizowanych spółek i spełniających podwójne kryteria
+3. Top 10 ranking spółek spełniających kryteria ROE ≥ 10% ORAZ C/Z ≤ 15, wyświetlający:
+   - Numer rankingu
+   - Symbol ticker
+   - Procentowe ROE
+   - Wskaźnik C/Z
+   - Zysk netto z separatorami tysięcy
+   - Nazwa spółki
+4. Generuje wiele plików CSV w tym samym katalogu
+
+### Przykładowe Wyjście
+```
+📊 RAPORT INWESTYCYJNY - ANALIZA WIG30
+📅 Data raportu: 16.10.2025
+============================================================
+🎯 Strategia: Value Investing (ROE ≥ 10% + C/Z ≤ 15)
+💡 Cel: Identyfikacja fundamentalnie mocnych i niedowartościowanych spółek
+
+🔍 PRZEBIEG ANALIZY:
+   Analizowanie PEO.WA... ✅
+   Analizowanie PKN.WA... ✅
+   ...
+
+📈 PODSUMOWANIE DLA ZARZĄDU:
+   • Łącznie przeanalizowano spółek: 30
+   • Spółki rentowne (zysk netto > 0): 18 (60.0%)
+   • Spółki spełniające kryteria strategii: 12 (40.0%)
+
+🎯 REKOMENDACJE INWESTYCYJNE:
+📊 Spółki spełniające kryteria Value Investing:
+==================================================================================
+Lp. Ticker    | ROE    | C/Z    |     Zysk Netto | Nazwa Spółki
+==================================================================================
+  1. KRU.WA   | ROE: 28.5% | C/Z:  8.2 |    120,000,000 PLN | Kruk SA
+  2. PKN.WA   | ROE: 22.1% | C/Z:  6.5 |  1,570,000,000 PLN | ORLEN S.A.
+  3. PZU.WA   | ROE: 18.7% | C/Z:  7.8 |  1,470,000,000 PLN | PZU SA
+...
+```
+
+## Język
+
+Bot wyświetla wszystkie komunikaty w języku polskim, co czyni go idealnym dla polskiego rynku inwestycyjnego.
 
 ## License
 

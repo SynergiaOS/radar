@@ -2,6 +2,7 @@
 """
 Advanced ML/RL Trading System
 Machine Learning and Reinforcement Learning for stock trading decisions
+Enhanced with comprehensive risk management features
 """
 
 import pandas as pd
@@ -17,8 +18,12 @@ from sklearn.metrics import accuracy_score, mean_squared_error
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import risk management and market regime modules
+from risk_management import RiskManager
+from market_regime import MarketRegimeDetector
+
 class AdvancedMLTradingSystem:
-    """Advanced trading system with ML/RL capabilities."""
+    """Advanced trading system with ML/RL capabilities enhanced with risk management."""
 
     def __init__(self):
         self.price_data = {}
@@ -28,6 +33,18 @@ class AdvancedMLTradingSystem:
         self.scalers = {}
         self.prediction_history = []
         self.rl_agent = None
+
+        # Enhanced features with risk management
+        self.risk_manager = RiskManager()
+        self.market_regime_detector = MarketRegimeDetector()
+        self.portfolio_positions = []
+        self.trading_history = []
+        self.market_regimes = {}
+
+        # Performance tracking
+        self.win_rate_history = {}
+        self.avg_win_loss = {}
+        self.model_confidence_scores = {}
 
     def load_historical_data(self, prices_file='data/current_prices.csv',
                            fundamentals_file='wig30_analysis_pe_threshold.csv'):
@@ -575,11 +592,311 @@ class AdvancedMLTradingSystem:
         # Note: In a real implementation, you'd save the actual model objects
         print(f"💾 ML models metadata saved to {directory}/models_metadata.json")
 
+    def generate_risk_aware_signals(self, capital: float = 100000) -> Dict:
+        """Generate trading signals enhanced with risk management."""
+        print("🛡️ Generating risk-aware ML/RL trading signals...")
+
+        # Get comprehensive signals
+        base_signals = self.generate_comprehensive_signals()
+        risk_enhanced_signals = []
+
+        # Update market regimes for all tickers
+        for ticker in self.fundamental_data.keys():
+            if ticker in self.price_data:
+                prices = [p['close'] for p in self.price_data[ticker]]
+                highs = [p['high'] for p in self.price_data[ticker]]
+                lows = [p['low'] for p in self.price_data[ticker]]
+
+                if len(prices) >= 14:
+                    df = pd.DataFrame({
+                        'close': prices,
+                        'high': highs,
+                        'low': lows
+                    })
+
+                    regime_info = self.market_regime_detector.analyze_regime(df)
+                    self.market_regimes[ticker] = regime_info
+
+        for signal in base_signals['signals']:
+            ticker = signal['ticker']
+
+            # Get market regime
+            regime = self.market_regimes.get(ticker, {})
+            market_regime = regime.get('regime', 'UNKNOWN')
+            regime_strength = regime.get('strength', 0)
+
+            # Calculate position size using Kelly Criterion
+            historical_win_rate = self.ml_models[ticker]['accuracy'] if ticker in self.ml_models else 0.5
+            ml_confidence = signal['ml_confidence']
+            rl_confidence = signal.get('rl_confidence', 0)
+
+            kelly_fraction = self.risk_manager.calculate_kelly_with_confidence(
+                ml_confidence, rl_confidence, historical_win_rate
+            )
+
+            # Calculate position details
+            current_price = signal['current_price']
+            atr_value = self._calculate_atr(ticker)
+
+            stop_loss = self.risk_manager.calculate_optimal_stop_loss(
+                current_price, atr_value, method='atr'
+            )
+
+            take_profit = current_price + (current_price - stop_loss) * 2  # 2:1 risk/reward
+
+            position_size = self.risk_manager.calculate_position_size(
+                capital, 0.02, current_price, stop_loss  # 2% risk per trade
+            )
+
+            # Validate risk-reward
+            risk_reward_valid = self.risk_manager.validate_trade_risk_reward(
+                current_price, stop_loss, take_profit
+            )
+
+            # Check correlation risk with existing positions
+            correlation_risk = self.risk_manager.check_correlation_risk(
+                ticker, self.portfolio_positions
+            )
+
+            # Adjust signal based on market regime
+            regime_adjustment = self._get_regime_adjustment(market_regime, signal['final_action'])
+            adjusted_score = signal['combined_score'] * regime_adjustment
+
+            # Enhanced final action with risk considerations
+            final_action = self._determine_risk_adjusted_action(
+                signal['final_action'],
+                adjusted_score,
+                risk_reward_valid,
+                correlation_risk['is_high_correlation'],
+                market_regime
+            )
+
+            risk_enhanced_signals.append({
+                **signal,
+                'market_regime': market_regime,
+                'regime_strength': regime_strength,
+                'kelly_fraction': kelly_fraction,
+                'position_size': position_size,
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'risk_reward_ratio': self.risk_manager.calculate_risk_reward_ratio(
+                    current_price, stop_loss, take_profit
+                ),
+                'atr_value': atr_value,
+                'correlation_risk': correlation_risk,
+                'risk_adjusted_score': adjusted_score,
+                'risk_adjusted_action': final_action,
+                'max_position_size': self.risk_manager.calculate_max_position_size(capital),
+                'portfolio_heat_check': self._check_portfolio_heat(capital),
+                'risk_recommendations': self._generate_risk_recommendations(
+                    final_action, kelly_fraction, correlation_risk, market_regime
+                )
+            })
+
+        # Sort by risk-adjusted score
+        risk_enhanced_signals.sort(key=lambda x: x['risk_adjusted_score'], reverse=True)
+
+        return {
+            'signals': risk_enhanced_signals,
+            'ml_model_count': len(self.ml_models),
+            'rl_trained': self.rl_agent is not None,
+            'risk_management_enabled': True,
+            'portfolio_summary': self._get_portfolio_summary(capital),
+            'timestamp': datetime.now().isoformat()
+        }
+
+    def _calculate_atr(self, ticker: str, period: int = 14) -> float:
+        """Calculate Average True Range for a ticker."""
+        if ticker not in self.price_data:
+            return 0.0
+
+        prices = self.price_data[ticker]
+        if len(prices) < period:
+            return 0.0
+
+        true_ranges = []
+        for i in range(1, len(prices)):
+            high = prices[i]['high']
+            low = prices[i]['low']
+            prev_close = prices[i-1]['close']
+
+            tr1 = high - low
+            tr2 = abs(high - prev_close)
+            tr3 = abs(low - prev_close)
+
+            true_ranges.append(max(tr1, tr2, tr3))
+
+        if len(true_ranges) >= period:
+            return sum(true_ranges[-period:]) / period
+        else:
+            return sum(true_ranges) / len(true_ranges) if true_ranges else 0.0
+
+    def _get_regime_adjustment(self, regime: str, action: str) -> float:
+        """Get regime-based adjustment factor."""
+        adjustments = {
+            ('VERY_STRONG_TREND', 'STRONG BUY'): 1.2,
+            ('VERY_STRONG_TREND', 'BUY'): 1.1,
+            ('STRONG_TREND', 'STRONG BUY'): 1.1,
+            ('STRONG_TREND', 'BUY'): 1.05,
+            ('EMERGING_TREND', 'BUY'): 1.0,
+            ('WEAK_TREND', 'BUY'): 0.9,
+            ('CONSOLIDATION', 'BUY'): 0.7,
+            ('CONSOLIDATION', 'SELL'): 0.7,
+            ('WEAK_TREND', 'SELL'): 0.9,
+            ('EMERGING_TREND', 'SELL'): 1.0,
+            ('STRONG_TREND', 'SELL'): 1.05,
+            ('VERY_STRONG_TREND', 'SELL'): 1.1,
+        }
+
+        return adjustments.get((regime, action), 1.0)
+
+    def _determine_risk_adjusted_action(self, base_action: str, score: float,
+                                      risk_reward_valid: bool, high_correlation: bool,
+                                      regime: str) -> str:
+        """Determine final action considering all risk factors."""
+        # Reduce position size if risk-reward is poor
+        if not risk_reward_valid:
+            if base_action in ['STRONG BUY', 'BUY']:
+                return 'HOLD'
+            elif base_action == 'STRONG BUY':
+                return 'BUY'
+
+        # Avoid correlated positions
+        if high_correlation and base_action in ['STRONG BUY', 'BUY']:
+            return 'HOLD'
+
+        # Avoid trades in unfavorable market regimes
+        if regime == 'CONSOLIDATION' and base_action in ['STRONG BUY', 'BUY']:
+            if score < 60:  # Only strong signals in consolidation
+                return 'HOLD'
+            else:
+                return 'BUY'  # Downgrade from STRONG BUY
+
+        return base_action
+
+    def _check_portfolio_heat(self, capital: float) -> Dict:
+        """Check current portfolio heat."""
+        if not self.portfolio_positions:
+            return {
+                'total_risk': 0,
+                'portfolio_heat_pct': 0,
+                'is_overheated': False,
+                'remaining_capacity': self.risk_manager.max_portfolio_heat
+            }
+
+        return self.risk_manager.calculate_portfolio_heat(self.portfolio_positions, capital)
+
+    def _generate_risk_recommendations(self, action: str, kelly_fraction: float,
+                                     correlation_risk: Dict, regime: str) -> List[str]:
+        """Generate risk management recommendations."""
+        recommendations = []
+
+        if kelly_fraction > 0.25:
+            recommendations.append(f"⚠️ High Kelly fraction ({kelly_fraction:.2%}) - consider reducing position size")
+        elif kelly_fraction < 0.05:
+            recommendations.append(f"⚠️ Very low Kelly fraction ({kelly_fraction:.2%}) - consider avoiding this trade")
+
+        if correlation_risk['is_high_correlation']:
+            recommendations.append(f"⚠️ High correlation with existing positions: {correlation_risk['correlated_positions']}")
+
+        if regime == 'CONSOLIDATION':
+            recommendations.append("📊 Market in consolidation - reduce position sizes")
+        elif regime in ['STRONG_TREND', 'VERY_STRONG_TREND']:
+            recommendations.append(f"📈 Strong {regime.replace('_', ' ').lower()} detected - favorable for trend following")
+
+        if action == 'HOLD':
+            recommendations.append("🔄 Risk management suggests holding - signal strength insufficient")
+
+        return recommendations
+
+    def _get_portfolio_summary(self, capital: float) -> Dict:
+        """Get current portfolio summary."""
+        if not self.portfolio_positions:
+            return {
+                'total_positions': 0,
+                'total_value': 0,
+                'unrealized_pnl': 0,
+                'total_risk': 0,
+                'portfolio_heat': 0,
+                'cash_available': capital
+            }
+
+        total_value = sum(pos.get('position_value', 0) for pos in self.portfolio_positions)
+        total_risk = sum(pos.get('position_risk', 0) for pos in self.portfolio_positions)
+        portfolio_heat = (total_risk / capital) * 100
+
+        return {
+            'total_positions': len(self.portfolio_positions),
+            'total_value': total_value,
+            'unrealized_pnl': sum(pos.get('unrealized_pnl', 0) for pos in self.portfolio_positions),
+            'total_risk': total_risk,
+            'portfolio_heat': portfolio_heat,
+            'cash_available': capital - total_value,
+            'risk_overheated': portfolio_heat > self.risk_manager.max_portfolio_heat
+        }
+
+    def simulate_trade_execution(self, signal: Dict, capital: float) -> Dict:
+        """Simulate trade execution with risk management."""
+        try:
+            ticker = signal['ticker']
+            action = signal['risk_adjusted_action']
+
+            if action not in ['BUY', 'STRONG BUY']:
+                return {'status': 'skipped', 'reason': f'Action {action} not suitable for buying'}
+
+            # Get position size
+            position_info = signal['position_size']
+            shares = position_info['shares']
+
+            if shares <= 0:
+                return {'status': 'skipped', 'reason': 'Position size too small'}
+
+            # Simulate execution
+            entry_price = signal['current_price']
+            stop_loss = signal['stop_loss']
+            take_profit = signal['take_profit']
+
+            # Create position record
+            position = {
+                'ticker': ticker,
+                'shares': shares,
+                'entry_price': entry_price,
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'current_price': entry_price,
+                'position_value': shares * entry_price,
+                'position_risk': shares * (entry_price - stop_loss),
+                'unrealized_pnl': 0,
+                'entry_time': datetime.now(),
+                'regime_at_entry': signal.get('market_regime', 'UNKNOWN'),
+                'kelly_fraction': signal.get('kelly_fraction', 0),
+                'ml_confidence': signal.get('ml_confidence', 0),
+                'rl_confidence': signal.get('rl_confidence', 0)
+            }
+
+            # Add to portfolio
+            self.portfolio_positions.append(position)
+
+            # Update cash
+            used_capital = position['position_value']
+            remaining_capital = capital - used_capital
+
+            return {
+                'status': 'executed',
+                'position': position,
+                'used_capital': used_capital,
+                'remaining_capital': remaining_capital,
+                'execution_time': datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            return {'status': 'error', 'reason': str(e)}
+
 
 def main():
-    """Main function to run the advanced ML/RL trading system."""
-    print("🤖 ADVANCED ML/RL TRADING SYSTEM")
-    print("=" * 60)
+    """Main function to run the advanced ML/RL trading system with risk management."""
+    print("🤖 ADVANCED ML/RL TRADING SYSTEM WITH RISK MANAGEMENT")
+    print("=" * 70)
 
     system = AdvancedMLTradingSystem()
 
@@ -594,69 +911,109 @@ def main():
     # Train RL agent
     system.train_rl_agent(episodes=500)  # Reduced for faster execution
 
-    # Generate comprehensive signals
-    results = system.generate_comprehensive_signals()
+    # Generate risk-aware signals
+    capital = 100000  # 100k PLN starting capital
+    risk_aware_results = system.generate_risk_aware_signals(capital)
 
     # Display results
-    print(f"\n🎯 COMPREHENSIVE ML/RL TRADING SIGNALS")
-    print("=" * 80)
-    print(f"🤖 ML Models: {results['ml_model_count']}")
-    print(f"🧠 RL Agent: {'Trained' if results['rl_trained'] else 'Not trained'}")
-    print("=" * 80)
+    print(f"\n🎯 RISK-AWARE ML/RL TRADING SIGNALS")
+    print("=" * 90)
+    print(f"🤖 ML Models: {risk_aware_results['ml_model_count']}")
+    print(f"🧠 RL Agent: {'Trained' if risk_aware_results['rl_trained'] else 'Not trained'}")
+    print(f"🛡️ Risk Management: {'Enabled' if risk_aware_results['risk_management_enabled'] else 'Disabled'}")
+    print(f"💰 Starting Capital: {capital:,.0f} PLN")
+    print("=" * 90)
 
-    # Display top signals
-    signals = results['signals'][:10]  # Top 10
+    # Display portfolio summary
+    portfolio_summary = risk_aware_results['portfolio_summary']
+    print(f"\n📊 PORTFOLIO SUMMARY:")
+    print(f"   💰 Available Capital: {portfolio_summary['cash_available']:,.0f} PLN")
+    print(f"   📈 Portfolio Heat: {portfolio_summary['portfolio_heat']:.1f}%")
+    print(f"   🔥 Max Heat Allowed: {system.risk_manager.max_portfolio_heat:.1f}%")
+    print(f"   📊 Open Positions: {portfolio_summary['total_positions']}")
 
-    buy_signals = [s for s in signals if s['final_action'] in ['STRONG BUY', 'BUY']]
-    hold_signals = [s for s in signals if s['final_action'] == 'HOLD']
-    sell_signals = [s for s in signals if s['final_action'] == 'SELL']
+    # Display top risk-aware signals
+    signals = risk_aware_results['signals'][:10]  # Top 10
+
+    buy_signals = [s for s in signals if s['risk_adjusted_action'] in ['STRONG BUY', 'BUY']]
+    hold_signals = [s for s in signals if s['risk_adjusted_action'] == 'HOLD']
+    sell_signals = [s for s in signals if s['risk_adjusted_action'] == 'SELL']
 
     if buy_signals:
-        print(f"\n🟢 ML/RL BUY SIGNALS ({len(buy_signals)}):")
-        print("-" * 80)
+        print(f"\n🟢 RISK-AWARE BUY SIGNALS ({len(buy_signals)}):")
+        print("-" * 100)
         for signal in buy_signals[:5]:
             print(f"🚀 {signal['ticker']:<8} | {signal['current_price']:>8.2f} PLN | "
-                  f"Score: {signal['combined_score']:>6.1f} | ML: {signal['ml_prediction']:<4} "
-                  f"| RL: {signal['rl_action']:<4} | {signal['name'][:30]}")
+                  f"Score: {signal['risk_adjusted_score']:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
+                  f"RR: {signal['risk_reward_ratio']:.1f} | Regime: {signal['market_regime'][:4]} | "
+                  f"{signal['name'][:25]}")
 
     if hold_signals:
-        print(f"\n🟡 ML/RL HOLD SIGNALS ({len(hold_signals)}):")
-        print("-" * 80)
+        print(f"\n🟡 RISK-AWARE HOLD SIGNALS ({len(hold_signals)}):")
+        print("-" * 100)
         for signal in hold_signals[:3]:
             print(f"⏸️  {signal['ticker']:<8} | {signal['current_price']:>8.2f} PLN | "
-                  f"Score: {signal['combined_score']:>6.1f} | ML: {signal['ml_prediction']:<4} "
-                  f"| RL: {signal['rl_action']:<4} | {signal['name'][:30]}")
+                  f"Score: {signal['risk_adjusted_score']:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
+                  f"RR: {signal['risk_reward_ratio']:.1f} | Regime: {signal['market_regime'][:4]} | "
+                  f"{signal['name'][:25]}")
 
     if sell_signals:
-        print(f"\n🔴 ML/RL SELL SIGNALS ({len(sell_signals)}):")
-        print("-" * 80)
+        print(f"\n🔴 RISK-AWARE SELL SIGNALS ({len(sell_signals)}):")
+        print("-" * 100)
         for signal in sell_signals[:3]:
             print(f"📉 {signal['ticker']:<8} | {signal['current_price']:>8.2f} PLN | "
-                  f"Score: {signal['combined_score']:>6.1f} | ML: {signal['ml_prediction']:<4} "
-                  f"| RL: {signal['rl_action']:<4} | {signal['name'][:30]}")
+                  f"Score: {signal['risk_adjusted_score']:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
+                  f"RR: {signal['risk_reward_ratio']:.1f} | Regime: {signal['market_regime'][:4]} | "
+                  f"{signal['name'][:25]}")
 
-    # Detailed analysis for top signal
+    # Detailed analysis for top signal with trade execution simulation
     if signals:
         top_signal = signals[0]
-        print(f"\n🔍 TOP ML/RL SIGNAL ANALYSIS:")
+        print(f"\n🔍 TOP RISK-AWARE SIGNAL ANALYSIS:")
         print(f"   📊 {top_signal['ticker']} - {top_signal['name']}")
         print(f"   💰 Current Price: {top_signal['current_price']:.2f} PLN")
-        print(f"   🎯 Final Action: {top_signal['final_action']}")
-        print(f"   📈 Combined Score: {top_signal['combined_score']:.1f}")
-        print(f"   🤖 ML Prediction: {top_signal['ml_prediction']} (confidence: {top_signal['ml_confidence']:.3f})")
-        print(f"   🧠 RL Action: {top_signal['rl_action']} (confidence: {top_signal['rl_confidence']:.3f})")
-        print(f"   📊 ML Accuracy: {top_signal['ml_accuracy']:.3f}")
-        print(f"   📈 RSI: {top_signal['rsi']:.1f}")
+        print(f"   🎯 Risk-Adjusted Action: {top_signal['risk_adjusted_action']}")
+        print(f"   📈 Risk-Adjusted Score: {top_signal['risk_adjusted_score']:.1f}")
+        print(f"   🛡️ Kelly Fraction: {top_signal['kelly_fraction']:.2%}")
+        print(f"   📊 Risk/Reward Ratio: {top_signal['risk_reward_ratio']:.2f}")
+        print(f"   🎯 Stop Loss: {top_signal['stop_loss']:.2f} PLN")
+        print(f"   🎯 Take Profit: {top_signal['take_profit']:.2f} PLN")
+        print(f"   📊 Market Regime: {top_signal['market_regime']}")
+        print(f"   🤖 ML Confidence: {top_signal['ml_confidence']:.3f}")
+        print(f"   🧠 RL Confidence: {top_signal['rl_confidence']:.3f}")
+        print(f"   📈 Position Size: {top_signal['position_size']['shares']:.0f} shares")
+        print(f"   💰 Position Value: {top_signal['position_size']['position_value']:,.0f} PLN")
 
-    # Save results
-    with open('ml_rl_trading_signals.json', 'w') as f:
-        json.dump(results, f, indent=2)
+        # Risk recommendations
+        if top_signal['risk_recommendations']:
+            print(f"\n   ⚠️  RISK RECOMMENDATIONS:")
+            for rec in top_signal['risk_recommendations']:
+                print(f"      {rec}")
+
+        # Simulate trade execution for top signal
+        print(f"\n🔄 SIMULATING TRADE EXECUTION:")
+        execution_result = system.simulate_trade_execution(top_signal, capital)
+
+        if execution_result['status'] == 'executed':
+            position = execution_result['position']
+            print(f"   ✅ Trade Executed Successfully")
+            print(f"   📊 Position: {position['shares']:.0f} shares of {position['ticker']}")
+            print(f"   💰 Used Capital: {execution_result['used_capital']:,.0f} PLN")
+            print(f"   💵 Remaining Capital: {execution_result['remaining_capital']:,.0f} PLN")
+            print(f"   🛡️ Stop Loss: {position['stop_loss']:.2f} PLN")
+            print(f"   🎯 Take Profit: {position['take_profit']:.2f} PLN")
+        else:
+            print(f"   ❌ Trade Skipped: {execution_result['reason']}")
+
+    # Save risk-aware results
+    with open('risk_aware_trading_signals.json', 'w') as f:
+        json.dump(risk_aware_results, f, indent=2, default=str)
 
     # Save models
     system.save_models()
 
-    print(f"\n💾 Results saved to: ml_rl_trading_signals.json")
-    print(f"🏁 Advanced ML/RL analysis complete!")
+    print(f"\n💾 Risk-aware results saved to: risk_aware_trading_signals.json")
+    print(f"🏁 Advanced ML/RL with Risk Management analysis complete!")
 
 
 if __name__ == "__main__":

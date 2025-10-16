@@ -1,10 +1,44 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
+import re
+import time
+from typing import Optional, Dict, Any
 from config import PROFITABILITY_THRESHOLD, USE_DECODO_API
 from decodo_api import DecodoAPIClient
 
 
-def analyze_company_fundamentals(ticker: str) -> dict | None:
+def retry_with_backoff(func, max_retries: int = 3, base_delay: float = 0.5):
+    """
+    Retry helper with exponential backoff for transient error handling.
+
+    Args:
+        func: Function to retry
+        max_retries: Maximum number of retry attempts
+        base_delay: Base delay in seconds
+
+    Returns:
+        Function result or None if all retries fail
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            result = func()
+            if result is not None:
+                return result
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"Max retries exceeded for function {func.__name__}: {str(e)}")
+                return None
+
+            # Calculate exponential backoff with jitter
+            delay = base_delay * (2 ** attempt) + np.random.uniform(0, 0.1)
+            print(f"Retry {attempt + 1}/{max_retries} for {func.__name__} after {delay:.2f}s delay...")
+            time.sleep(delay)
+
+    return None
+
+
+def analyze_company_fundamentals(ticker: str) -> Optional[Dict[str, Any]]:
     """
     Analyze company fundamentals including profitability (ROE) and valuation (P/E ratio).
 
@@ -52,7 +86,7 @@ def analyze_company_fundamentals(ticker: str) -> dict | None:
         return None
 
 
-def _analyze_with_yfinance(ticker: str) -> dict | None:
+def _analyze_with_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
     """
     Analyze company fundamentals using yfinance (fallback method).
 
@@ -63,18 +97,29 @@ def _analyze_with_yfinance(ticker: str) -> dict | None:
         Dictionary with analysis results or None if data unavailable
     """
     try:
-        # Create ticker object
-        stock = yf.Ticker(ticker)
+        # Create ticker object with retry
+        def get_ticker():
+            return yf.Ticker(ticker)
 
-        # Get quarterly financial data
-        quarterly_financials = stock.quarterly_financials
+        stock = retry_with_backoff(get_ticker)
+        if stock is None:
+            print(f"Warning: Failed to create ticker object for {ticker}")
+            return None
 
-        if quarterly_financials.empty:
+        # Get quarterly financial data with retry
+        def get_financials():
+            return stock.quarterly_financials
+
+        quarterly_financials = retry_with_backoff(get_financials)
+        if quarterly_financials is None or quarterly_financials.empty:
             print(f"Warning: No quarterly financial data available for {ticker}")
             return None
 
-        # Get quarterly balance sheet data
-        quarterly_balance_sheet = stock.quarterly_balance_sheet
+        # Get quarterly balance sheet data with retry
+        def get_balance_sheet():
+            return stock.quarterly_balance_sheet
+
+        quarterly_balance_sheet = retry_with_backoff(get_balance_sheet)
 
         # Find the most recent common column between financials and balance sheet
         latest_col = None
@@ -91,20 +136,35 @@ def _analyze_with_yfinance(ticker: str) -> dict | None:
         latest_quarter = quarterly_financials[latest_col]
         latest_balance_quarter = quarterly_balance_sheet[latest_col] if not quarterly_balance_sheet.empty and latest_col in quarterly_balance_sheet.columns else None
 
-        # Extract net income
+        # Extract net income with prioritized labels and regex fallback
         net_income = None
-        if 'Net Income' in latest_quarter.index:
-            net_income = latest_quarter['Net Income']
-        elif 'Net Income Continuing Operations' in latest_quarter.index:
-            net_income = latest_quarter['Net Income Continuing Operations']
-        else:
-            # Look for similar net income related rows
-            net_income_rows = [idx for idx in latest_quarter.index if 'net income' in idx.lower()]
-            if net_income_rows:
-                net_income = latest_quarter[net_income_rows[0]]
-            else:
-                print(f"Warning: Could not find net income data for {ticker}")
-                return None
+        net_income_labels = [
+            'Net Income',
+            'Net Income Continuing Operations',
+            'Net Income from Continuing Operations',
+            'Net Income Applicable to Common Shares',
+            'Net Income After Tax',
+            'Consolidated Net Income'
+        ]
+
+        # Try prioritized labels first
+        for label in net_income_labels:
+            if label in latest_quarter.index:
+                net_income = latest_quarter[label]
+                break
+
+        # If still not found, use regex fallback anchored at start of label
+        if net_income is None:
+            for idx in latest_quarter.index:
+                idx_str = str(idx).strip()
+                # Regex anchored at start: net income (case insensitive)
+                if re.match(r'^\s*net\s+income', idx_str, re.IGNORECASE):
+                    net_income = latest_quarter[idx]
+                    break
+
+        if net_income is None:
+            print(f"Warning: Could not find net income data for {ticker}")
+            return None
 
         if net_income is None or pd.isna(net_income):
             print(f"Warning: Net income data is missing for {ticker}")
@@ -144,23 +204,29 @@ def _analyze_with_yfinance(ticker: str) -> dict | None:
         else:
             print(f"Warning: No balance sheet data available for {ticker}")
 
-        # Get company name
-        company_name = stock.info.get('longName', ticker)
+        # Get company name with retry
+        def get_company_info():
+            return stock.info
+
+        company_info = retry_with_backoff(get_company_info)
+        company_name = company_info.get('longName', ticker) if company_info else ticker
 
         # Get quarter end date
         quarter_end = latest_quarter.name.strftime('%Y-%m-%d') if hasattr(latest_quarter.name, 'strftime') else str(latest_quarter.name)
 
-        # Fetch current stock price
+        # Fetch current stock price with retry
         current_price = None
-        try:
-            # Try to get current price from info
-            current_price = stock.info.get('currentPrice') or stock.info.get('regularMarketPrice')
-            if current_price is None or current_price <= 0:
+        def get_current_price():
+            price = company_info.get('currentPrice') or company_info.get('regularMarketPrice')
+            if price is None or price <= 0:
                 # Fallback to historical data
                 hist_data = stock.history(period='1d')
                 if not hist_data.empty:
-                    current_price = hist_data['Close'].iloc[-1]
+                    price = hist_data['Close'].iloc[-1]
+            return price
 
+        try:
+            current_price = retry_with_backoff(get_current_price)
             if current_price and current_price > 0:
                 current_price = float(current_price)
             else:

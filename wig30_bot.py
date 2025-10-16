@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+import time
 from datetime import datetime
 from analyzer import analyze_company_fundamentals
 from config import (
@@ -36,7 +38,7 @@ def main():
     all_results = []
 
     print("🔍 PRZEBIEG ANALIZY:")
-    for ticker in tickers:
+    for i, ticker in enumerate(tickers):
         print(f"   Analizowanie {ticker}...", end=' ')
         result = analyze_company_fundamentals(ticker)
         if result:
@@ -44,6 +46,10 @@ def main():
             print("✅")
         else:
             print("❌")
+
+        # Rate limiting: add delay between tickers (except last one)
+        if i < len(tickers) - 1:
+            time.sleep(np.random.uniform(0.2, 0.5))  # Random delay between 0.2-0.5 seconds
 
     print()
 
