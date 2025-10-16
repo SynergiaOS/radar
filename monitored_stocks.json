@@ -1,0 +1,43 @@
+{
+  "session_start": "2025-10-13T10:59:18.587263",
+  "last_update": "2025-10-13T11:09:31.862162",
+  "monitored_stocks": [
+    {
+      "ticker": "TXT.WA",
+      "name": "Text S.A.",
+      "net_income": 31024000.0,
+      "equity": 167198000.0,
+      "roe": 18.555245876146845,
+      "current_price": 51.0,
+      "eps": 5.89,
+      "pe_ratio": 8.65874363327674,
+      "profitable": true,
+      "quarter_end": "2025-06-30",
+      "data_source": "yfinance"
+    },
+    {
+      "ticker": "XTB.WA",
+      "name": "XTB S.A.",
+      "net_income": 216125000.0,
+      "equity": 1762980000.0,
+      "roe": 12.25907270644023,
+      "current_price": 67.36,
+      "eps": 6.84,
+      "pe_ratio": 9.84795321637427,
+      "profitable": true,
+      "quarter_end": "2025-06-30",
+      "data_source": "yfinance"
+    }
+  ],
+  "alerts_count": 0,
+  "price_history_summary": {
+    "TXT.WA": {
+      "latest_price": 50.75,
+      "update_count": 21
+    },
+    "XTB.WA": {
+      "latest_price": 67.5,
+      "update_count": 21
+    }
+  }
+}

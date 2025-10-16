@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+  }
+}
+
+body {
+  color: rgb(var(--foreground));
+  background: linear-gradient(135deg, #131722 0%, #1e1e1e 100%);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-background text-foreground;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-surface;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-surfaceLight rounded-md;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-border;
+}
+
+/* Chart container styling */
+.chart-container {
+  @apply bg-surface rounded-lg border border-border;
+}
+
+/* Loading states */
+.loading-shimmer {
+  @apply animate-pulse bg-surfaceLight rounded;
+}
+
+/* Trading-specific utilities */
+.up-color {
+  @apply text-up;
+}
+
+.down-color {
+  @apply text-down;
+}
+
+.neutral-color {
+  @apply text-neutral;
+}
+
+.bg-up {
+  background-color: #26a69a;
+}
+
+.bg-down {
+  background-color: #ef5350;
+}
+
+/* Card component base styles */
+@layer components {
+  .card {
+    @apply bg-surface border border-border rounded-lg shadow-card;
+  }
+
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-card-hover hover:border-surfaceLight;
+  }
+
+  .metric-card {
+    @apply p-6 bg-surface border border-border rounded-lg;
+  }
+
+  .metric-value {
+    @apply text-2xl font-bold text-textPrimary;
+  }
+
+  .metric-label {
+    @apply text-sm text-textSecondary mt-1;
+  }
+
+  /* Button styles */
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-surfaceLight hover:bg-surface text-textPrimary px-4 py-2 rounded-lg transition-colors border border-border;
+  }
+
+  .btn-ghost {
+    @apply hover:bg-surfaceLight text-textSecondary px-4 py-2 rounded-lg transition-colors;
+  }
+
+  /* Badge styles */
+  .badge-buy {
+    @apply bg-actions-buy/20 text-actions-buy px-2 py-1 rounded-full text-sm font-medium;
+  }
+
+  .badge-sell {
+    @apply bg-actions-sell/20 text-actions-sell px-2 py-1 rounded-full text-sm font-medium;
+  }
+
+  .badge-hold {
+    @apply bg-actions-hold/20 text-actions-hold px-2 py-1 rounded-full text-sm font-medium;
+  }
+}
+
+/* Animation utilities */
+@keyframes slideInFromTop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInFromBottom {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-in-top {
+  animation: slideInFromTop 0.3s ease-out;
+}
+
+.slide-in-bottom {
+  animation: slideInFromBottom 0.3s ease-out;
+}

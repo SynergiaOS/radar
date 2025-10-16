@@ -1,0 +1,27 @@
+{
+  "email": {
+    "enabled": false,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "sender_email": "",
+    "sender_password": "",
+    "recipients": []
+  },
+  "push": {
+    "enabled": false,
+    "pushbullet_token": "",
+    "pushover_user_key": "",
+    "pushover_app_key": ""
+  },
+  "webhook": {
+    "enabled": false,
+    "discord_webhook": "",
+    "slack_webhook": "",
+    "teams_webhook": ""
+  },
+  "filters": {
+    "min_signal_strength": 50,
+    "only_buy_signals": false,
+    "only_top_n": 5
+  }
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "ticker": "TXT.WA",
+    "name": "Text S.A.",
+    "current_price": 51.47,
+    "risk_profile": "MODERATE",
+    "timestamp": "2025-10-13T11:26:19.185910",
+    "technical_score": 40,
+    "fundamental_score": 85,
+    "overall_score": 62.5,
+    "action": "HOLD",
+    "confidence": "LOW",
+    "reasoning": [
+      "Overall Score: 62.5",
+      "Technical: 40.0",
+      "Fundamental: 85.0",
+      "Risk Profile: MODERATE",
+      "Below SMA5",
+      "Good ROE: 18.6%",
+      "Good P/E: 8.7",
+      "Profitable company"
+    ],
+    "technical_analysis": "Below SMA5",
+    "support": 51.47,
+    "resistance": 51.47
+  },
+  {
+    "ticker": "XTB.WA",
+    "name": "XTB S.A.",
+    "current_price": 68.06,
+    "risk_profile": "MODERATE",
+    "timestamp": "2025-10-13T11:26:19.185924",
+    "technical_score": 40,
+    "fundamental_score": 75,
+    "overall_score": 57.5,
+    "action": "SELL",
+    "confidence": "HIGH",
+    "reasoning": [
+      "Overall Score: 57.5",
+      "Technical: 40.0",
+      "Fundamental: 75.0",
+      "Risk Profile: MODERATE",
+      "Below SMA5",
+      "Decent ROE: 12.3%",
+      "Good P/E: 9.8",
+      "Profitable company"
+    ],
+    "technical_analysis": "Below SMA5",
+    "support": 68.06,
+    "resistance": 68.06
+  }
+]

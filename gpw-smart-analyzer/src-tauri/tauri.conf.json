@@ -1,0 +1,94 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "GPW Smart Analyzer",
+  "version": "1.0.0",
+  "identifier": "com.gpw.smartanalyzer",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:3000",
+    "distDir": "../out",
+    "withGlobalTauri": true
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "GPW Smart Analyzer",
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true,
+        "minWidth": 1200,
+        "minHeight": 700,
+        "theme": "dark"
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "'self' http://localhost:5000 ws://localhost:5000 https://*.yahooapis.com https://*.yimg.com",
+        "img-src": "'self' data: https: blob:",
+        "script-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "worker-src": "'self' blob:"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "identifier": "com.gpw.smartanalyzer",
+    "publisher": "GPW Smart Analyzer Team",
+    "category": "Finance",
+    "shortDescription": "Advanced trading analysis for GPW stocks",
+    "longDescription": "GPW Smart Analyzer is a comprehensive trading analysis application for Warsaw Stock Exchange (GPW) stocks. It features professional TradingView-style charts, real-time technical indicators, pattern detection, and ML/RL-powered trading signals.",
+    "externalBin": [],
+    "resources": [],
+    "copyright": "",
+    "license": "MIT",
+    "licenseFile": "../LICENSE"
+  },
+  "plugins": {
+    "updater": {
+      "active": false
+    },
+    "deep-link": {
+      "active": false
+    },
+    "dialog": {
+      "active": true
+    },
+    "fs": {
+      "active": true,
+      "readFile": true,
+      "writeFile": true,
+      "scope": ["$APPDATA/*", "$RESOURCE/*", "$CONFIG/*"]
+    },
+    "shell": {
+      "active": true,
+      "open": true
+    },
+    "window": {
+      "active": true
+    }
+  },
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "shell:allow-open",
+    "window:default"
+  ]
+}

@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 WIG30/WIG20 Investment Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        .card-bg {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .success-glow {
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        }
+        .pulse-animation {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="border-b border-gray-700">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="text-3xl">🤖</div>
+                    <div>
+                        <h1 class="text-2xl font-bold">Investment Dashboard</h1>
+                        <p class="text-gray-400">WIG30/WIG20 Value Investing Strategy</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-right">
+                        <div class="text-sm text-gray-400">Last Update</div>
+                        <div class="text-sm font-medium" id="lastUpdate">Never</div>
+                    </div>
+                    <button onclick="runAnalysis()"
+                            class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span>Run Analysis</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Status Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="card-bg rounded-xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Active Index</p>
+                        <p class="text-2xl font-bold" id="activeIndex">WIG30</p>
+                    </div>
+                    <div class="text-3xl">📊</div>
+                </div>
+            </div>
+
+            <div class="card-bg rounded-xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Recommendations</p>
+                        <p class="text-2xl font-bold" id="recommendationsCount">0</p>
+                    </div>
+                    <div class="text-3xl">🎯</div>
+                </div>
+            </div>
+
+            <div class="card-bg rounded-xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">ROE Threshold</p>
+                        <p class="text-2xl font-bold" id="roeThreshold">≥10%</p>
+                    </div>
+                    <div class="text-3xl">📈</div>
+                </div>
+            </div>
+
+            <div class="card-bg rounded-xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">P/E Threshold</p>
+                        <p class="text-2xl font-bold" id="peThreshold">≤15</p>
+                    </div>
+                    <div class="text-3xl">💰</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="hidden">
+            <div class="card-bg rounded-xl p-12 text-center">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                <p class="text-xl font-medium">Running Analysis...</p>
+                <p class="text-gray-400 mt-2">This may take a few moments</p>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="hidden">
+            <div class="card-bg rounded-xl p-12 text-center border border-red-500">
+                <div class="text-4xl mb-4">❌</div>
+                <p class="text-xl font-medium text-red-400">Analysis Failed</p>
+                <p class="text-gray-400 mt-2" id="errorMessage">Please try again</p>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden">
+            <div class="card-bg rounded-xl p-12 text-center">
+                <div class="text-4xl mb-4">📊</div>
+                <p class="text-xl font-medium">No Analysis Data Available</p>
+                <p class="text-gray-400 mt-2">Click "Run Analysis" to get started</p>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="mainDashboard" class="hidden">
+            <!-- TradingView-style Chart Section -->
+            <div class="card-bg rounded-xl p-6 mb-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold">📈 TradingView Charts - Technical Analysis</h3>
+                    <div class="flex space-x-2">
+                        <select id="stockSelector" class="bg-gray-700 text-white px-4 py-2 rounded-lg">
+                            <option value="">Select Stock...</option>
+                        </select>
+                        <select id="periodSelector" class="bg-gray-700 text-white px-4 py-2 rounded-lg">
+                            <option value="1mo">1M</option>
+                            <option value="3mo">3M</option>
+                            <option value="6mo">6M</option>
+                            <option value="1y" selected>1Y</option>
+                            <option value="2y">2Y</option>
+                        </select>
+                        <button onclick="loadChart()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                            Load Chart
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Trading Chart -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2">
+                        <div class="bg-gray-900 rounded-lg p-4">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 id="chartTitle" class="text-lg font-medium">Select a stock to view chart</h4>
+                                <div id="chartPrice" class="text-sm text-gray-400"></div>
+                            </div>
+                            <div style="height: 400px; position: relative;">
+                                <canvas id="tradingChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Technical Indicators Panel -->
+                    <div class="space-y-4">
+                        <div class="bg-gray-900 rounded-lg p-4">
+                            <h4 class="font-medium mb-3">📊 Technical Indicators</h4>
+                            <div id="indicatorsPanel" class="space-y-2 text-sm">
+                                <div class="text-gray-400">Select stock to view indicators</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-900 rounded-lg p-4">
+                            <h4 class="font-medium mb-3">⚙️ Chart Settings</h4>
+                            <div class="space-y-2">
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="showSMA" checked class="mr-2">
+                                    <span>SMA (20)</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="showVolume" checked class="mr-2">
+                                    <span>Volume</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="showRSI" class="mr-2">
+                                    <span>RSI (14)</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="showMACD" class="mr-2">
+                                    <span>MACD</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Volume and RSI Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                    <div class="bg-gray-900 rounded-lg p-4">
+                        <h4 class="font-medium mb-2">📊 Volume</h4>
+                        <div style="height: 150px;">
+                            <canvas id="volumeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-gray-900 rounded-lg p-4">
+                        <h4 class="font-medium mb-2">📈 RSI (14)</h4>
+                        <div style="height: 150px;">
+                            <canvas id="rsiChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="card-bg rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4">ROE Distribution</h3>
+                    <canvas id="roeChart"></canvas>
+                </div>
+
+                <div class="card-bg rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4">P/E Distribution</h3>
+                    <canvas id="peChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="card-bg rounded-xl p-6 border-2 border-green-500/30">
+                    <h3 class="text-lg font-semibold mb-2 text-green-400">🟢 KUP</h3>
+                    <p class="text-3xl font-bold" id="buyCount">0</p>
+                    <p class="text-gray-400 text-sm">Spółki do kupienia</p>
+                </div>
+                <div class="card-bg rounded-xl p-6 border-2 border-yellow-500/30">
+                    <h3 class="text-lg font-semibold mb-2 text-yellow-400">🟡 TRZYMAJ</h3>
+                    <p class="text-3xl font-bold" id="holdCount">0</p>
+                    <p class="text-gray-400 text-sm">Spółki do trzymania</p>
+                </div>
+                <div class="card-bg rounded-xl p-6 border-2 border-red-500/30">
+                    <h3 class="text-lg font-semibold mb-2 text-red-400">🔴 SPRZEDAJ</h3>
+                    <p class="text-3xl font-bold" id="sellCount">0</p>
+                    <p class="text-gray-400 text-sm">Spółki do sprzedania</p>
+                </div>
+            </div>
+
+            <!-- All Stocks Table -->
+            <div class="card-bg rounded-xl p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold">📊 WSZYSTKIE SPÓŁKI - DECYZJE INWESTYCYJNE</h3>
+                    <div class="flex space-x-2">
+                        <button onclick="filterStocks('all')"
+                                class="filter-btn px-4 py-2 rounded-lg bg-blue-600 text-white font-medium">
+                            Wszystkie
+                        </button>
+                        <button onclick="filterStocks('KUP')"
+                                class="filter-btn px-4 py-2 rounded-lg bg-gray-700 text-gray-300 font-medium hover:bg-green-600">
+                            KUP
+                        </button>
+                        <button onclick="filterStocks('TRZYMAJ')"
+                                class="filter-btn px-4 py-2 rounded-lg bg-gray-700 text-gray-300 font-medium hover:bg-yellow-600">
+                            TRZYMAJ
+                        </button>
+                        <button onclick="filterStocks('SPRZEDAJ')"
+                                class="filter-btn px-4 py-2 rounded-lg bg-gray-700 text-gray-300 font-medium hover:bg-red-600">
+                            SPRZEDAJ
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-gray-700">
+                                <th class="text-left py-3 px-4">Ticker</th>
+                                <th class="text-left py-3 px-4">Company Name</th>
+                                <th class="text-center py-3 px-4">DECYZJA</th>
+                                <th class="text-right py-3 px-4">ROE</th>
+                                <th class="text-right py-3 px-4">P/E</th>
+                                <th class="text-right py-3 px-4">Net Income</th>
+                                <th class="text-right py-3 px-4">Current Price</th>
+                                <th class="text-center py-3 px-4">Profitable</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allStocksTable">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let roeChart = null;
+        let peChart = null;
+        let tradingChart = null;
+        let volumeChart = null;
+        let rsiChart = null;
+        let currentStockData = null;
+
+        // TradingView-style Chart Manager
+        class TradingChartManager {
+            constructor() {
+                this.charts = {};
+                this.currentTicker = null;
+                this.indicators = {
+                    sma: true,
+                    volume: true,
+                    rsi: false,
+                    macd: false
+                };
+            }
+
+            async loadChart(ticker, period = '1y') {
+                try {
+                    const response = await fetch(`/api/chart/${ticker}?period=${period}&indicators=SMA_20,RSI_14,MACD`);
+                    if (!response.ok) throw new Error('Failed to load chart data');
+
+                    const data = await response.json();
+                    currentStockData = data;
+                    this.currentTicker = ticker;
+
+                    this.updateChartInfo(data.info);
+                    this.renderMainChart(data);
+                    this.renderVolumeChart(data);
+                    this.renderRSIChart(data);
+                    this.updateIndicatorsPanel(ticker);
+
+                } catch (error) {
+                    console.error('Error loading chart:', error);
+                    this.showError('Failed to load chart data');
+                }
+            }
+
+            updateChartInfo(info) {
+                document.getElementById('chartTitle').textContent = `${info.name} (${this.currentTicker})`;
+                const changeClass = info.change >= 0 ? 'text-green-400' : 'text-red-400';
+                const changeSymbol = info.change >= 0 ? '+' : '';
+                document.getElementById('chartPrice').innerHTML = `
+                    <span class="${changeClass}">
+                        ${info.current_price.toFixed(2)} (${changeSymbol}${info.change_percent.toFixed(2)}%)
+                    </span>
+                `;
+            }
+
+            renderMainChart(data) {
+                const ctx = document.getElementById('tradingChart').getContext('2d');
+
+                if (tradingChart) {
+                    tradingChart.destroy();
+                }
+
+                const datasets = [
+                    {
+                        type: 'candlestick',
+                        label: 'Price',
+                        data: data.candlestick,
+                        yAxisID: 'y',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                        borderWidth: 1,
+                        barPercentage: 0.8,
+                        categoryPercentage: 1.0
+                    }
+                ];
+
+                // Add SMA if enabled
+                if (this.indicators.sma && data.indicators.SMA_20) {
+                    datasets.push({
+                        type: 'line',
+                        label: 'SMA 20',
+                        data: data.indicators.SMA_20,
+                        borderColor: 'rgba(255, 206, 86, 1)',
+                        backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        yAxisID: 'y'
+                    });
+                }
+
+                tradingChart = new Chart(ctx, {
+                    type: 'candlestick',
+                    data: { datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: { color: '#fff' }
+                            },
+                            tooltip: {
+                                enabled: true,
+                                mode: 'index',
+                                intersect: false,
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#fff',
+                                bodyColor: '#fff',
+                                borderColor: 'rgba(255, 255, 255, 0.1)',
+                                borderWidth: 1
+                            },
+                            zoom: {
+                                zoom: {
+                                    wheel: {
+                                        enabled: true,
+                                    },
+                                    pinch: {
+                                        enabled: true
+                                    },
+                                    mode: 'x',
+                                },
+                                pan: {
+                                    enabled: true,
+                                    mode: 'x',
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: {
+                                    unit: 'day',
+                                    displayFormats: {
+                                        day: 'MMM dd'
+                                    }
+                                },
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.1)'
+                                },
+                                ticks: {
+                                    color: '#fff'
+                                }
+                            },
+                            y: {
+                                position: 'right',
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.1)'
+                                },
+                                ticks: {
+                                    color: '#fff',
+                                    callback: function(value) {
+                                        return value.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            renderVolumeChart(data) {
+                const ctx = document.getElementById('volumeChart').getContext('2d');
+
+                if (volumeChart) {
+                    volumeChart.destroy();
+                }
+
+                volumeChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        datasets: [{
+                            label: 'Volume',
+                            data: data.volume,
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: { unit: 'day' },
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                ticks: { display: false }
+                            },
+                            y: {
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                ticks: {
+                                    color: '#fff',
+                                    callback: function(value) {
+                                        if (value >= 1000000) {
+                                            return (value / 1000000).toFixed(1) + 'M';
+                                        } else if (value >= 1000) {
+                                            return (value / 1000).toFixed(1) + 'K';
+                                        }
+                                        return value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            renderRSIChart(data) {
+                const ctx = document.getElementById('rsiChart').getContext('2d');
+
+                if (rsiChart) {
+                    rsiChart.destroy();
+                }
+
+                if (!data.indicators.RSI_14) {
+                    return;
+                }
+
+                rsiChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: [{
+                            label: 'RSI 14',
+                            data: data.indicators.RSI_14,
+                            borderColor: 'rgba(255, 159, 64, 1)',
+                            backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: { unit: 'day' },
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                ticks: { display: false }
+                            },
+                            y: {
+                                min: 0,
+                                max: 100,
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                ticks: { color: '#fff' },
+                                afterBuildTicks: (scale) => {
+                                    scale.ticks = [
+                                        { value: 30, label: 'Oversold' },
+                                        { value: 50, label: 'Neutral' },
+                                        { value: 70, label: 'Overbought' }
+                                    ];
+                                    return scale;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            async updateIndicatorsPanel(ticker) {
+                try {
+                    const response = await fetch(`/api/indicators/${ticker}`);
+                    if (!response.ok) return;
+
+                    const indicators = await response.json();
+                    const panel = document.getElementById('indicatorsPanel');
+
+                    const rsiClass = indicators.rsi > 70 ? 'text-red-400' :
+                                     indicators.rsi < 30 ? 'text-green-400' : 'text-yellow-400';
+
+                    const priceVsSMA20 = indicators.sma_20 ?
+                        (indicators.price > indicators.sma_20 ? 'text-green-400' : 'text-red-400') : '';
+
+                    const priceVsSMA50 = indicators.sma_50 ?
+                        (indicators.price > indicators.sma_50 ? 'text-green-400' : 'text-red-400') : '';
+
+                    panel.innerHTML = `
+                        <div class="flex justify-between">
+                            <span>Price:</span>
+                            <span class="font-medium">${indicators.price.toFixed(2)} PLN</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>RSI (14):</span>
+                            <span class="${rsiClass} font-medium">${indicators.rsi?.toFixed(2) || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>SMA (20):</span>
+                            <span class="${priceVsSMA20} font-medium">${indicators.sma_20?.toFixed(2) || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>SMA (50):</span>
+                            <span class="${priceVsSMA50} font-medium">${indicators.sma_50?.toFixed(2) || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>MACD:</span>
+                            <span class="font-medium">${indicators.macd?.toFixed(4) || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Volume:</span>
+                            <span class="font-medium">${this.formatVolume(indicators.volume)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>ATR (14):</span>
+                            <span class="font-medium">${indicators.atr?.toFixed(4) || 'N/A'}</span>
+                        </div>
+                    `;
+
+                } catch (error) {
+                    console.error('Error updating indicators panel:', error);
+                }
+            }
+
+            formatVolume(volume) {
+                if (volume >= 1000000) {
+                    return (volume / 1000000).toFixed(1) + 'M';
+                } else if (volume >= 1000) {
+                    return (volume / 1000).toFixed(1) + 'K';
+                }
+                return volume.toString();
+            }
+
+            showError(message) {
+                document.getElementById('chartTitle').textContent = message;
+                document.getElementById('chartPrice').textContent = '';
+            }
+        }
+
+        const chartManager = new TradingChartManager();
+
+        // Initialize dashboard
+        async function initDashboard() {
+            await loadStatus();
+            await loadAnalysis();
+        }
+
+        // Load system status
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+
+                document.getElementById('activeIndex').textContent = status.active_index;
+                document.getElementById('recommendationsCount').textContent = status.recommendations_count;
+                document.getElementById('roeThreshold').textContent = `≥${status.thresholds.roe_threshold}%`;
+                document.getElementById('peThreshold').textContent = `≤${status.thresholds.pe_threshold}`;
+
+                if (status.last_update) {
+                    const date = new Date(status.last_update);
+                    document.getElementById('lastUpdate').textContent = date.toLocaleString();
+                }
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+
+        // Load analysis data
+        async function loadAnalysis() {
+            try {
+                const response = await fetch('/api/all_stocks');
+                if (response.ok) {
+                    const data = await response.json();
+                    displayAllStocks(data);
+                } else {
+                    showEmptyState();
+                }
+            } catch (error) {
+                console.error('Error loading analysis:', error);
+                showError('Failed to load analysis data');
+            }
+        }
+
+        // Run new analysis
+        async function runAnalysis() {
+            showLoading();
+
+            try {
+                const response = await fetch('/api/run_analysis', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    await loadStatus();
+                    // Load all stocks after analysis
+                    const allStocksResponse = await fetch('/api/all_stocks');
+                    if (allStocksResponse.ok) {
+                        const allStocksData = await allStocksResponse.json();
+                        displayAllStocks(allStocksData);
+                    }
+                } else {
+                    showError(result.message);
+                }
+            } catch (error) {
+                console.error('Error running analysis:', error);
+                showError('Failed to run analysis');
+            }
+        }
+
+        let allStocksData = [];
+        let currentFilter = 'all';
+
+        // Display all stocks with investment decisions
+        function displayAllStocks(data) {
+            hideAllStates();
+            document.getElementById('mainDashboard').classList.remove('hidden');
+
+            allStocksData = data.stocks;
+
+            // Count decisions
+            const buyCount = allStocksData.filter(s => s.decision === 'KUP').length;
+            const holdCount = allStocksData.filter(s => s.decision === 'TRZYMAJ').length;
+            const sellCount = allStocksData.filter(s => s.decision === 'SPRZEDAJ').length;
+
+            // Update summary cards
+            document.getElementById('buyCount').textContent = buyCount;
+            document.getElementById('holdCount').textContent = holdCount;
+            document.getElementById('sellCount').textContent = sellCount;
+
+            // Populate stock selector
+            populateStockSelector();
+
+            // Display filtered stocks
+            displayFilteredStocks();
+
+            // Update charts with BUY recommendations
+            const buyStocks = allStocksData.filter(s => s.decision === 'KUP');
+            updateCharts(buyStocks);
+        }
+
+        // Populate stock selector dropdown
+        function populateStockSelector() {
+            const selector = document.getElementById('stockSelector');
+            selector.innerHTML = '<option value="">Select Stock...</option>';
+
+            // Sort stocks by decision and name
+            const sortedStocks = [...allStocksData].sort((a, b) => {
+                const decisionOrder = { 'KUP': 0, 'TRZYMAJ': 1, 'SPRZEDAJ': 2 };
+                if (decisionOrder[a.decision] !== decisionOrder[b.decision]) {
+                    return decisionOrder[a.decision] - decisionOrder[b.decision];
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            sortedStocks.forEach(stock => {
+                const option = document.createElement('option');
+                option.value = stock.ticker;
+                option.textContent = `${stock.ticker} - ${stock.name} (${stock.decision})`;
+                option.className = stock.decision === 'KUP' ? 'text-green-400' :
+                                 stock.decision === 'TRZYMAJ' ? 'text-yellow-400' : 'text-red-400';
+                selector.appendChild(option);
+            });
+
+            // Auto-select first BUY stock if available
+            const firstBuyStock = sortedStocks.find(s => s.decision === 'KUP');
+            if (firstBuyStock) {
+                selector.value = firstBuyStock.ticker;
+                setTimeout(() => loadChart(), 500);
+            }
+        }
+
+        // Load chart for selected stock
+        async function loadChart() {
+            const ticker = document.getElementById('stockSelector').value;
+            const period = document.getElementById('periodSelector').value;
+
+            if (!ticker) {
+                alert('Please select a stock first');
+                return;
+            }
+
+            await chartManager.loadChart(ticker, period);
+        }
+
+        // Update chart settings
+        function updateChartSettings() {
+            chartManager.indicators.sma = document.getElementById('showSMA').checked;
+            chartManager.indicators.volume = document.getElementById('showVolume').checked;
+            chartManager.indicators.rsi = document.getElementById('showRSI').checked;
+            chartManager.indicators.macd = document.getElementById('showMACD').checked;
+
+            // Reload chart if stock is selected
+            if (chartManager.currentTicker) {
+                const period = document.getElementById('periodSelector').value;
+                chartManager.loadChart(chartManager.currentTicker, period);
+            }
+        }
+
+        // Display filtered stocks based on current filter
+        function displayFilteredStocks() {
+            const tbody = document.getElementById('allStocksTable');
+            tbody.innerHTML = '';
+
+            let filteredStocks = allStocksData;
+            if (currentFilter !== 'all') {
+                filteredStocks = allStocksData.filter(s => s.decision === currentFilter);
+            }
+
+            filteredStocks.forEach(stock => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-800 hover:bg-gray-800/50 transition-colors';
+
+                const decisionColor = getDecisionColor(stock.decision);
+                const decisionIcon = getDecisionIcon(stock.decision);
+                const profitableStatus = stock.profitable ? '✅ Tak' : '❌ Nie';
+                const profitableColor = stock.profitable ? 'text-green-400' : 'text-red-400';
+                const roeValue = stock.roe ? stock.roe.toFixed(1) + '%' : 'N/A';
+                const peValue = stock.pe_ratio ? stock.pe_ratio.toFixed(1) : 'N/A';
+
+                row.innerHTML = `
+                    <td class="py-3 px-4 font-medium">${stock.ticker}</td>
+                    <td class="py-3 px-4">${stock.name}</td>
+                    <td class="py-3 px-4 text-center">
+                        <span class="px-3 py-1 rounded-full text-sm font-bold ${decisionColor} bg-opacity-20 ${decisionColor.replace('text', 'bg')}">
+                            ${decisionIcon} ${stock.decision}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-right font-medium ${stock.roe >= 10 ? 'text-green-400' : 'text-gray-400'}">${roeValue}</td>
+                    <td class="py-3 px-4 text-right font-medium ${stock.pe_ratio <= 15 ? 'text-blue-400' : 'text-gray-400'}">${peValue}</td>
+                    <td class="py-3 px-4 text-right">${formatCurrency(stock.net_income)}</td>
+                    <td class="py-3 px-4 text-right">${stock.current_price.toFixed(2)} PLN</td>
+                    <td class="py-3 px-4 text-center ${profitableColor}">${profitableStatus}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Get decision color class
+        function getDecisionColor(decision) {
+            switch(decision) {
+                case 'KUP': return 'text-green-400';
+                case 'TRZYMAJ': return 'text-yellow-400';
+                case 'SPRZEDAJ': return 'text-red-400';
+                default: return 'text-gray-400';
+            }
+        }
+
+        // Get decision icon
+        function getDecisionIcon(decision) {
+            switch(decision) {
+                case 'KUP': return '🟢';
+                case 'TRZYMAJ': return '🟡';
+                case 'SPRZEDAJ': return '🔴';
+                default: return '⚪';
+            }
+        }
+
+        // Filter stocks by decision
+        function filterStocks(filter) {
+            currentFilter = filter;
+
+            // Update button styles
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'bg-green-600', 'bg-yellow-600', 'bg-red-600', 'text-white');
+                btn.classList.add('bg-gray-700', 'text-gray-300');
+            });
+
+            const activeBtn = event.target;
+            activeBtn.classList.remove('bg-gray-700', 'text-gray-300');
+
+            switch(filter) {
+                case 'all':
+                    activeBtn.classList.add('bg-blue-600', 'text-white');
+                    break;
+                case 'KUP':
+                    activeBtn.classList.add('bg-green-600', 'text-white');
+                    break;
+                case 'TRZYMAJ':
+                    activeBtn.classList.add('bg-yellow-600', 'text-white');
+                    break;
+                case 'SPRZEDAJ':
+                    activeBtn.classList.add('bg-red-600', 'text-white');
+                    break;
+            }
+
+            displayFilteredStocks();
+        }
+
+        // Update charts
+        function updateCharts(recommendations) {
+            const tickers = recommendations.map(r => r.ticker);
+            const roeValues = recommendations.map(r => r.roe);
+            const peValues = recommendations.map(r => r.pe_ratio);
+
+            // ROE Chart
+            const roeCtx = document.getElementById('roeChart').getContext('2d');
+            if (roeChart) roeChart.destroy();
+
+            roeChart = new Chart(roeCtx, {
+                type: 'bar',
+                data: {
+                    labels: tickers,
+                    datasets: [{
+                        label: 'ROE (%)',
+                        data: roeValues,
+                        backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                        borderColor: 'rgba(34, 197, 94, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: value => value + '%' }
+                        }
+                    }
+                }
+            });
+
+            // P/E Chart
+            const peCtx = document.getElementById('peChart').getContext('2d');
+            if (peChart) peChart.destroy();
+
+            peChart = new Chart(peCtx, {
+                type: 'bar',
+                data: {
+                    labels: tickers,
+                    datasets: [{
+                        label: 'P/E Ratio',
+                        data: peValues,
+                        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Utility functions
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('pl-PL', {
+                style: 'currency',
+                currency: 'PLN',
+                minimumFractionDigits: 0
+            }).format(amount);
+        }
+
+        function showLoading() {
+            hideAllStates();
+            document.getElementById('loadingState').classList.remove('hidden');
+        }
+
+        function showError(message) {
+            hideAllStates();
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorState').classList.remove('hidden');
+        }
+
+        function showEmptyState() {
+            hideAllStates();
+            document.getElementById('emptyState').classList.remove('hidden');
+        }
+
+        function hideAllStates() {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorState').classList.add('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('mainDashboard').classList.add('hidden');
+        }
+
+        // Add event listeners for chart settings
+        document.addEventListener('DOMContentLoaded', () => {
+            initDashboard();
+
+            // Chart settings listeners
+            document.getElementById('showSMA').addEventListener('change', updateChartSettings);
+            document.getElementById('showVolume').addEventListener('change', updateChartSettings);
+            document.getElementById('showRSI').addEventListener('change', updateChartSettings);
+            document.getElementById('showMACD').addEventListener('change', updateChartSettings);
+
+            // Period selector listener
+            document.getElementById('periodSelector').addEventListener('change', () => {
+                if (chartManager.currentTicker) {
+                    loadChart();
+                }
+            });
+
+            // Stock selector enter key listener
+            document.getElementById('stockSelector').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    loadChart();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

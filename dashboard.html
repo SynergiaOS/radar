@@ -1,0 +1,322 @@
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Stock Monitoring Dashboard - WIG30</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #7f8c8d;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card h3 {
+            color: #34495e;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 25px;
+        }
+
+        .stocks-section, .alerts-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .stock-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #3498db;
+            transition: all 0.3s ease;
+        }
+
+        .stock-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .ticker {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 1.2em;
+        }
+
+        .price {
+            font-weight: bold;
+            color: #27ae60;
+            font-size: 1.1em;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .metric {
+            font-size: 0.9em;
+        }
+
+        .metric-label {
+            color: #7f8c8d;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .alert {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+            border-left: 4px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        .alert.price-up {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border-left-color: #28a745;
+        }
+
+        .alert.price-down {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border-left-color: #dc3545;
+        }
+
+        .alert-time {
+            font-size: 0.85em;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        .alert-content {
+            font-weight: bold;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            padding: 40px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Stock Monitoring Dashboard</h1>
+            <div class="subtitle">Real-time tracking of WIG30 companies • Last updated: 13.10.2025 10:58:43</div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>🏢 Monitorowanych Spółek</h3>
+                <div class="stat-value">2</div>
+            </div>
+            <div class="stat-card">
+                <h3>🚨 Alertów (24h)</h3>
+                <div class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>💰 Średnie ROE</h3>
+                <div class="stat-value">15.4%</div>
+            </div>
+            <div class="stat-card">
+                <h3>📈 Średnie P/E</h3>
+                <div class="stat-value">9.3</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="stocks-section">
+                <h2 class="section-title">📈 Monitorowane Spółki</h2>
+                
+                <div class="stock-card">
+                    <div class="stock-header">
+                        <span class="ticker">TXT.WA</span>
+                        <span class="price">51.00 PLN</span>
+                    </div>
+                    <div style="font-size: 0.9em; color: #555; margin-bottom: 8px;">Text S.A.</div>
+                    <div class="metrics">
+                        <div class="metric">
+                            <span class="metric-label">ROE:</span>
+                            <span class="metric-value">18.6%</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">P/E:</span>
+                            <span class="metric-value">8.7</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Zysk:</span>
+                            <span class="metric-value">31.0M PLN</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Status:</span>
+                            <span class="metric-value" style="color: #27ae60;">✅ Aktywna</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stock-card">
+                    <div class="stock-header">
+                        <span class="ticker">XTB.WA</span>
+                        <span class="price">67.44 PLN</span>
+                    </div>
+                    <div style="font-size: 0.9em; color: #555; margin-bottom: 8px;">XTB S.A.</div>
+                    <div class="metrics">
+                        <div class="metric">
+                            <span class="metric-label">ROE:</span>
+                            <span class="metric-value">12.3%</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">P/E:</span>
+                            <span class="metric-value">9.8</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Zysk:</span>
+                            <span class="metric-value">216.1M PLN</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Status:</span>
+                            <span class="metric-value" style="color: #27ae60;">✅ Aktywna</span>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+
+            <div class="alerts-section">
+                <h2 class="section-title">🚨 Ostatnie Alerty</h2>
+                <div class="no-data">Brak alertów w ostatnich 24h.</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>📊 Dashboard auto-odświeżany • Dane z Yahoo Finance • Aktualizacja: 13.10.2025 10:58</p>
+            <p>⚠️ Disclaimer: Dane mają charakter informacyjny, nie stanowią porady inwestycyjnej</p>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh every 30 seconds
+        setTimeout(function(){
+            location.reload();
+        }, 30000);
+
+        // Add some interactivity
+        document.querySelectorAll('.stock-card').forEach(card => {
+            card.addEventListener('click', function() {
+                this.style.backgroundColor = '#e3f2fd';
+                setTimeout(() => {
+                    this.style.backgroundColor = '';
+                }, 500);
+            });
+        });
+    </script>
+</body>
+</html>
+    

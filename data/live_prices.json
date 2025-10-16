@@ -1,0 +1,62 @@
+{
+  "TXT.WA": {
+    "price": 51.47,
+    "change": 0.81,
+    "name": "Text S.A.",
+    "timestamp": "11:10:14"
+  },
+  "XTB.WA": {
+    "price": 68.06,
+    "change": -0.04,
+    "name": "XTB S.A.",
+    "timestamp": "11:10:14"
+  },
+  "PKN.WA": {
+    "price": 90.64,
+    "change": 1.36,
+    "name": "Orlen S.A.",
+    "timestamp": "11:10:14"
+  },
+  "PKO.WA": {
+    "price": 74.27,
+    "change": 0.42,
+    "name": "PKO BP S.A.",
+    "timestamp": "11:10:14"
+  },
+  "PZU.WA": {
+    "price": 55.65,
+    "change": -0.97,
+    "name": "PZU S.A.",
+    "timestamp": "11:10:14"
+  },
+  "LPP.WA": {
+    "price": 17058.1,
+    "change": -0.85,
+    "name": "LPP S.A.",
+    "timestamp": "11:10:14"
+  },
+  "CDR.WA": {
+    "price": 260.07,
+    "change": 1.41,
+    "name": "CD Projekt S.A.",
+    "timestamp": "11:10:14"
+  },
+  "KGH.WA": {
+    "price": 191.09,
+    "change": -0.12,
+    "name": "KGHM S.A.",
+    "timestamp": "11:10:14"
+  },
+  "PEO.WA": {
+    "price": 183.33,
+    "change": 1.13,
+    "name": "Bank PEKAO S.A.",
+    "timestamp": "11:10:14"
+  },
+  "MBK.WA": {
+    "price": 934.05,
+    "change": 0.49,
+    "name": "mBank S.A.",
+    "timestamp": "11:10:14"
+  }
+}

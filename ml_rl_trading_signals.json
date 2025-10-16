@@ -1,0 +1,41 @@
+{
+  "signals": [
+    {
+      "ticker": "XTB.WA",
+      "name": "XTB S.A.",
+      "current_price": 67.36,
+      "action": "HOLD",
+      "signal_strength": 14.863829787234039,
+      "ml_prediction": "UP",
+      "ml_confidence": 0.97,
+      "ml_accuracy": 0.40425531914893614,
+      "rsi": 95.8314562159229,
+      "volume_ratio": 1.0070564184771678,
+      "timestamp": "2025-10-13T11:51:45.072499",
+      "rl_action": "BUY",
+      "rl_confidence": 34.97049291747325,
+      "combined_score": 714.2736881366991,
+      "final_action": "STRONG BUY"
+    },
+    {
+      "ticker": "TXT.WA",
+      "name": "Text S.A.",
+      "current_price": 51.0,
+      "action": "HOLD",
+      "signal_strength": -12.463829787234044,
+      "ml_prediction": "DOWN",
+      "ml_confidence": 0.84,
+      "ml_accuracy": 0.5957446808510638,
+      "rsi": 50.049135660036974,
+      "volume_ratio": 1.1412511069413205,
+      "timestamp": "2025-10-13T11:51:45.045921",
+      "rl_action": "BUY",
+      "rl_confidence": 33.203696405354364,
+      "combined_score": 651.6100983198533,
+      "final_action": "STRONG BUY"
+    }
+  ],
+  "ml_model_count": 2,
+  "rl_trained": true,
+  "timestamp": "2025-10-13T11:51:45.072543"
+}
