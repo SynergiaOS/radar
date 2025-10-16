@@ -1,19 +1,24 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createChart, IChartApi, ISeriesApi, ColorType } from 'lightweight-charts'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp, TrendingDown } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TrendingUp, TrendingDown, BarChart3, Activity, Settings } from 'lucide-react'
 import { useStockData } from '@/lib/hooks/useStockData'
+import { ProfessionalChart } from './ProfessionalChart'
 
 interface TradingChartProps {
   ticker: string
   period?: string
   className?: string
+  onReady?: ({ chart, candlestickSeries }: { chart: IChartApi; candlestickSeries: ISeriesApi<'Candlestick'> }) => void
 }
 
-export function TradingChart({ ticker, period = '1y', className }: TradingChartProps) {
+export function TradingChart({ ticker, period = '1y', className, onReady }: TradingChartProps) {
+  const [chartMode, setChartMode] = useState<'lightweight' | 'professional'>('professional')
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -77,7 +82,11 @@ export function TradingChart({ ticker, period = '1y', className }: TradingChartP
       priceFormat: {
         type: 'volume',
       },
-      priceScaleId: 'volume',
+      priceScaleId: '', // Overlay on main pane
+    })
+
+    // Apply scale margins after creation
+    volumeSeries.priceScale().applyOptions({
       scaleMargins: {
         top: 0.7,
         bottom: 0,
@@ -93,10 +102,10 @@ export function TradingChart({ ticker, period = '1y', className }: TradingChartP
       })
 
       const smaData = stockData.indicators.SMA_20
-        .filter(item => item.value !== null)
+        .filter(item => item.y !== null)
         .map(item => ({
-          time: item.x,
-          value: item.value,
+          time: Math.floor(item.x / 1000), // Convert milliseconds to seconds
+          value: item.y,
         }))
 
       sma20Series.setData(smaData)
@@ -110,10 +119,10 @@ export function TradingChart({ ticker, period = '1y', className }: TradingChartP
       })
 
       const smaData = stockData.indicators.SMA_50
-        .filter(item => item.value !== null)
+        .filter(item => item.y !== null)
         .map(item => ({
-          time: item.x,
-          value: item.value,
+          time: Math.floor(item.x / 1000), // Convert milliseconds to seconds
+          value: item.y,
         }))
 
       sma50Series.setData(smaData)
@@ -121,7 +130,7 @@ export function TradingChart({ ticker, period = '1y', className }: TradingChartP
 
     // Format and set candlestick data
     const candlestickData = stockData.candlestick.map(item => ({
-      time: item.x,
+      time: Math.floor(item.x / 1000), // Convert milliseconds to seconds
       open: item.o,
       high: item.h,
       low: item.l,
@@ -131,7 +140,7 @@ export function TradingChart({ ticker, period = '1y', className }: TradingChartP
     const volumeData = stockData.volume.map((item, index) => {
       const candleData = stockData.candlestick[index]
       return {
-        time: item.x,
+        time: Math.floor(item.x / 1000), // Convert milliseconds to seconds
         value: item.y,
         color: candleData.c >= candleData.o ? '#26a69a80' : '#ef535080',
       }
@@ -140,9 +149,17 @@ export function TradingChart({ ticker, period = '1y', className }: TradingChartP
     candlestickSeries.setData(candlestickData)
     volumeSeries.setData(volumeData)
 
+    // Fit content to show all data
+    chart.timeScale().fitContent()
+
     // Store refs
     chartRef.current = chart
     candlestickSeriesRef.current = candlestickSeries
+
+    // Notify parent component that chart is ready
+    if (onReady) {
+      onReady({ chart, candlestickSeries })
+    }
 
     // Handle resize
     const handleResize = () => {
@@ -194,52 +211,173 @@ export function TradingChart({ ticker, period = '1y', className }: TradingChartP
     )
   }
 
-  return (
-    <Card className={className}>
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            <h3 className="text-lg font-semibold text-textPrimary">
-              {stockData.info?.name || ticker}
-            </h3>
-            <Badge variant="outline">{ticker}</Badge>
+  if (chartMode === 'professional') {
+    return (
+      <div className={`tv-chart-container ${className}`}>
+        {/* TradingView-style toolbar with mode switcher */}
+        <div className="tv-toolbar">
+          <div className="flex items-center space-x-2">
+            <span className="text-white font-medium">{ticker}</span>
+            <span className="text-gray-400 text-sm">{stockData.info?.name}</span>
+            <Badge variant="outline" className="text-xs border-green-500 text-green-400">
+              Professional Charts
+            </Badge>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <div className="text-xl font-bold text-textPrimary">
-                {stockData.info?.current_price?.toFixed(2)} PLN
-              </div>
-              <div className={`text-sm font-medium flex items-center ${
-                stockData.info?.change >= 0 ? 'text-up' : 'text-down'
-              }`}>
-                {stockData.info?.change >= 0 ? (
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                ) : (
-                  <TrendingDown className="h-3 w-3 mr-1" />
-                )}
-                {stockData.info?.change >= 0 ? '+' : ''}
-                {stockData.info?.change_percent?.toFixed(2)}%
-              </div>
-            </div>
+          <div className="flex items-center space-x-2 ml-auto">
+            <Tabs value={chartMode} onValueChange={(value: any) => setChartMode(value)} className="w-auto">
+              <TabsList className="bg-gray-800 border border-gray-700 h-8">
+                <TabsTrigger
+                  value="professional"
+                  className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                >
+                  <BarChart3 className="h-3 w-3" />
+                  <span className="hidden sm:inline">Pro</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="lightweight"
+                  className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                >
+                  <Activity className="h-3 w-3" />
+                  <span className="hidden sm:inline">Basic</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="border-l border-gray-600 h-4 mx-2"></div>
+
+            <button className="tv-toolbar-button">1D</button>
+            <button className="tv-toolbar-button">1W</button>
+            <button className="tv-toolbar-button">1M</button>
+            <button className="tv-toolbar-button bg-blue-600 text-white">1Y</button>
+            <button className="tv-toolbar-button">ALL</button>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {/* Chart container */}
-          <div ref={chartContainerRef} className="w-full" />
+        {/* Professional Chart Component */}
+        <ProfessionalChart
+          ticker={ticker}
+          companyName={stockData.info?.name}
+          className="flex-1"
+        />
+      </div>
+    )
+  }
 
-          {/* Chart info */}
-          <div className="flex items-center justify-between text-sm text-textSecondary">
-            <div>
-              Period: {period} | Data points: {stockData.candlestick.length}
-            </div>
-            <div>
-              Last update: {new Date().toLocaleTimeString()}
-            </div>
-          </div>
+  return (
+    <div className={`tv-chart-container ${className}`}>
+      {/* TradingView-style toolbar */}
+      <div className="tv-toolbar">
+        <div className="flex items-center space-x-2">
+          <span className="text-white font-medium">{ticker}</span>
+          <span className="text-gray-400 text-sm">{stockData.info?.name}</span>
+          <Badge variant="outline" className="text-xs border-gray-500 text-gray-400">
+            Basic Charts
+          </Badge>
+        </div>
+
+        <div className="flex items-center space-x-2 ml-auto">
+          <Tabs value={chartMode} onValueChange={(value: any) => setChartMode(value)} className="w-auto">
+            <TabsList className="bg-gray-800 border border-gray-700 h-8">
+              <TabsTrigger
+                value="professional"
+                className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                <BarChart3 className="h-3 w-3" />
+                <span className="hidden sm:inline">Pro</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="lightweight"
+                className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                <Activity className="h-3 w-3" />
+                <span className="hidden sm:inline">Basic</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="border-l border-gray-600 h-4 mx-2"></div>
+
+          <button className="tv-toolbar-button">1D</button>
+          <button className="tv-toolbar-button">1W</button>
+          <button className="tv-toolbar-button">1M</button>
+          <button className="tv-toolbar-button bg-blue-600 text-white">1Y</button>
+          <button className="tv-toolbar-button">ALL</button>
+
+          <div className="border-l border-gray-600 h-4 mx-2"></div>
+
+          <button className="tv-toolbar-button">Indicators</button>
+          <button className="tv-toolbar-button">Settings</button>
         </div>
       </div>
-    </Card>
+
+      {/* Price header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+        <div className="flex items-center space-x-4">
+          <div>
+            <div className={`text-2xl font-bold ${
+              stockData.info?.change >= 0 ? 'tv-up' : 'tv-down'
+            }`}>
+              {stockData.info?.current_price?.toFixed(2)} PLN
+            </div>
+            <div className={`text-sm font-medium flex items-center ${
+              stockData.info?.change >= 0 ? 'tv-up' : 'tv-down'
+            }`}>
+              {stockData.info?.change >= 0 ? (
+                <TrendingUp className="h-3 w-3 mr-1" />
+              ) : (
+                <TrendingDown className="h-3 w-3 mr-1" />
+              )}
+              {stockData.info?.change >= 0 ? '+' : ''}
+              {stockData.info?.change?.toFixed(2)} ({stockData.info?.change_percent?.toFixed(2)}%)
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-4 text-sm">
+            <div className="text-gray-400">
+              <div>O: {stockData.candlestick[stockData.candlestick.length - 1]?.o?.toFixed(2)}</div>
+              <div>H: {stockData.candlestick[stockData.candlestick.length - 1]?.h?.toFixed(2)}</div>
+            </div>
+            <div className="text-gray-400">
+              <div>L: {stockData.candlestick[stockData.candlestick.length - 1]?.l?.toFixed(2)}</div>
+              <div>C: {stockData.candlestick[stockData.candlestick.length - 1]?.c?.toFixed(2)}</div>
+            </div>
+            <div className="text-gray-400">
+              <div>Vol: {(stockData.volume[stockData.volume.length - 1]?.y / 1000000)?.toFixed(1)}M</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1">
+            <div className="w-3 h-3 bg-green-500 rounded"></div>
+            <span className="text-xs text-gray-400">SMA20</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <div className="w-3 h-3 bg-orange-500 rounded"></div>
+            <span className="text-xs text-gray-400">SMA50</span>
+          </div>
+          {stockData.indicators?.RSI_14 && (
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 bg-purple-500 rounded"></div>
+              <span className="text-xs text-gray-400">RSI14</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Chart container */}
+      <div ref={chartContainerRef} className="w-full" style={{ height: '500px' }} />
+
+      {/* Bottom status bar */}
+      <div className="flex items-center justify-between px-4 py-2 border-t border-gray-700 text-xs text-gray-400">
+        <div>
+          Period: {period.toUpperCase()} | Data points: {stockData.candlestick.length}
+        </div>
+        <div>
+          Last update: {new Date().toLocaleTimeString()}
+        </div>
+      </div>
+    </div>
   )
 }

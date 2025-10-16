@@ -593,14 +593,14 @@ class AdvancedMLTradingSystem:
         print(f"💾 ML models metadata saved to {directory}/models_metadata.json")
 
     def generate_risk_aware_signals(self, capital: float = 100000) -> Dict:
-        """Generate trading signals enhanced with risk management."""
-        print("🛡️ Generating risk-aware ML/RL trading signals...")
+        """Generate trading signals enhanced with risk management and regime filtering."""
+        print("🛡️ Generating advanced risk-aware ML/RL trading signals with regime filtering...")
 
         # Get comprehensive signals
         base_signals = self.generate_comprehensive_signals()
-        risk_enhanced_signals = []
 
-        # Update market regimes for all tickers
+        # Update market regimes for all tickers using enhanced ADX analysis
+        print("📊 Analyzing market regimes across all tickers...")
         for ticker in self.fundamental_data.keys():
             if ticker in self.price_data:
                 prices = [p['close'] for p in self.price_data[ticker]]
@@ -614,39 +614,44 @@ class AdvancedMLTradingSystem:
                         'low': lows
                     })
 
+                    # Use enhanced market regime detection with ADX
                     regime_info = self.market_regime_detector.analyze_regime(df)
-                    self.market_regimes[ticker] = regime_info
 
-        for signal in base_signals['signals']:
-            ticker = signal['ticker']
+                    # Apply regime filtering - only consider tickers with acceptable regimes
+                    if self._is_acceptable_regime(regime_info.get('regime', 'UNKNOWN')):
+                        self.market_regimes[ticker] = regime_info
+                    else:
+                        # Still store but mark as filtered
+                        self.market_regimes[ticker] = {
+                            **regime_info,
+                            'filtered': True,
+                            'filter_reason': f"Unfavorable regime: {regime_info.get('regime', 'UNKNOWN')}"
+                        }
 
-            # Get market regime
-            regime = self.market_regimes.get(ticker, {})
-            market_regime = regime.get('regime', 'UNKNOWN')
-            regime_strength = regime.get('strength', 0)
+        # Apply regime filtering to base signals
+        filtered_signals = self._get_regime_filtered_signals(base_signals['signals'])
+        risk_enhanced_signals = []
 
-            # Calculate position size using Kelly Criterion
-            historical_win_rate = self.ml_models[ticker]['accuracy'] if ticker in self.ml_models else 0.5
-            ml_confidence = signal['ml_confidence']
-            rl_confidence = signal.get('rl_confidence', 0)
+        print(f"🔍 Regime filtering: {len(base_signals['signals'])} → {len(filtered_signals)} signals")
 
-            kelly_fraction = self.risk_manager.calculate_kelly_with_confidence(
-                ml_confidence, rl_confidence, historical_win_rate
-            )
+        for signal in filtered_signals:
+            # Skip regime filtered signals (but we could still track them)
+            if signal.get('regime_filtered', False):
+                risk_enhanced_signals.append(signal)
+                continue
 
-            # Calculate position details
-            current_price = signal['current_price']
-            atr_value = self._calculate_atr(ticker)
+            # Enhance signal with comprehensive risk metrics
+            enhanced_signal = self._enhance_with_risk_metrics(signal, capital)
+
+            # Calculate position details with ATR-based stops
+            current_price = enhanced_signal['current_price']
+            atr_value = enhanced_signal['atr_value']
 
             stop_loss = self.risk_manager.calculate_optimal_stop_loss(
                 current_price, atr_value, method='atr'
             )
 
             take_profit = current_price + (current_price - stop_loss) * 2  # 2:1 risk/reward
-
-            position_size = self.risk_manager.calculate_position_size(
-                capital, 0.02, current_price, stop_loss  # 2% risk per trade
-            )
 
             # Validate risk-reward
             risk_reward_valid = self.risk_manager.validate_trade_risk_reward(
@@ -655,53 +660,68 @@ class AdvancedMLTradingSystem:
 
             # Check correlation risk with existing positions
             correlation_risk = self.risk_manager.check_correlation_risk(
-                ticker, self.portfolio_positions
+                signal['ticker'], self.portfolio_positions
             )
 
-            # Adjust signal based on market regime
-            regime_adjustment = self._get_regime_adjustment(market_regime, signal['final_action'])
+            # Adjust signal based on market regime (already partially done in enhancement)
+            regime_adjustment = self._get_regime_adjustment(
+                enhanced_signal['regime'], enhanced_signal['final_action']
+            )
             adjusted_score = signal['combined_score'] * regime_adjustment
 
-            # Enhanced final action with risk considerations
+            # Enhanced final action with all risk considerations
             final_action = self._determine_risk_adjusted_action(
-                signal['final_action'],
+                enhanced_signal['final_action'],
                 adjusted_score,
                 risk_reward_valid,
                 correlation_risk['is_high_correlation'],
-                market_regime
+                enhanced_signal['regime']
             )
 
-            risk_enhanced_signals.append({
-                **signal,
-                'market_regime': market_regime,
-                'regime_strength': regime_strength,
-                'kelly_fraction': kelly_fraction,
-                'position_size': position_size,
+            # Update enhanced signal with final risk calculations
+            enhanced_signal.update({
                 'stop_loss': stop_loss,
                 'take_profit': take_profit,
                 'risk_reward_ratio': self.risk_manager.calculate_risk_reward_ratio(
                     current_price, stop_loss, take_profit
                 ),
-                'atr_value': atr_value,
                 'correlation_risk': correlation_risk,
                 'risk_adjusted_score': adjusted_score,
                 'risk_adjusted_action': final_action,
                 'max_position_size': self.risk_manager.calculate_max_position_size(capital),
                 'portfolio_heat_check': self._check_portfolio_heat(capital),
                 'risk_recommendations': self._generate_risk_recommendations(
-                    final_action, kelly_fraction, correlation_risk, market_regime
-                )
+                    final_action,
+                    enhanced_signal['kelly_fraction'],
+                    correlation_risk,
+                    enhanced_signal['regime']
+                ),
+                'risk_reward_valid': risk_reward_valid,
+                'regime_adjustment_factor': regime_adjustment
             })
 
+            risk_enhanced_signals.append(enhanced_signal)
+
         # Sort by risk-adjusted score
-        risk_enhanced_signals.sort(key=lambda x: x['risk_adjusted_score'], reverse=True)
+        risk_enhanced_signals.sort(key=lambda x: x.get('risk_adjusted_score', x.get('combined_score', 0)), reverse=True)
+
+        # Calculate summary statistics
+        filtered_count = sum(1 for s in risk_enhanced_signals if s.get('regime_filtered', False))
+        accepted_count = len(risk_enhanced_signals) - filtered_count
 
         return {
             'signals': risk_enhanced_signals,
             'ml_model_count': len(self.ml_models),
             'rl_trained': self.rl_agent is not None,
             'risk_management_enabled': True,
+            'regime_filtering_enabled': True,
             'portfolio_summary': self._get_portfolio_summary(capital),
+            'filtering_summary': {
+                'total_signals': len(base_signals['signals']),
+                'filtered_by_regime': filtered_count,
+                'accepted_signals': accepted_count,
+                'acceptance_rate': accepted_count / len(base_signals['signals']) * 100 if base_signals['signals'] else 0
+            },
             'timestamp': datetime.now().isoformat()
         }
 
@@ -732,20 +752,34 @@ class AdvancedMLTradingSystem:
             return sum(true_ranges) / len(true_ranges) if true_ranges else 0.0
 
     def _get_regime_adjustment(self, regime: str, action: str) -> float:
-        """Get regime-based adjustment factor."""
+        """Get regime-based adjustment factor with enhanced filtering."""
+        # Enhanced regime adjustments with ADX-based filtering
         adjustments = {
-            ('VERY_STRONG_TREND', 'STRONG BUY'): 1.2,
-            ('VERY_STRONG_TREND', 'BUY'): 1.1,
-            ('STRONG_TREND', 'STRONG BUY'): 1.1,
-            ('STRONG_TREND', 'BUY'): 1.05,
-            ('EMERGING_TREND', 'BUY'): 1.0,
+            # Very Strong Trend (ADX > 60)
+            ('VERY_STRONG_TREND', 'STRONG BUY'): 1.3,
+            ('VERY_STRONG_TREND', 'BUY'): 1.2,
+            ('VERY_STRONG_TREND', 'SELL'): 0.6,  # Avoid counter-trend trading
+
+            # Strong Trend (ADX 40-60)
+            ('STRONG_TREND', 'STRONG BUY'): 1.2,
+            ('STRONG_TREND', 'BUY'): 1.1,
+            ('STRONG_TREND', 'SELL'): 0.7,  # Avoid counter-trend trading
+
+            # Emerging Strong Trend (ADX 25-40)
+            ('EMERGING_STRONG_TREND', 'STRONG BUY'): 1.1,
+            ('EMERGING_STRONG_TREND', 'BUY'): 1.0,
+            ('EMERGING_STRONG_TREND', 'SELL'): 0.8,
+
+            # Weak Trend (ADX 20-25)
             ('WEAK_TREND', 'BUY'): 0.9,
-            ('CONSOLIDATION', 'BUY'): 0.7,
-            ('CONSOLIDATION', 'SELL'): 0.7,
             ('WEAK_TREND', 'SELL'): 0.9,
-            ('EMERGING_TREND', 'SELL'): 1.0,
-            ('STRONG_TREND', 'SELL'): 1.05,
-            ('VERY_STRONG_TREND', 'SELL'): 1.1,
+            ('WEAK_TREND', 'STRONG BUY'): 0.8,  # Downgrade strong signals
+
+            # Consolidation (ADX < 20)
+            ('CONSOLIDATION', 'BUY'): 0.6,
+            ('CONSOLIDATION', 'SELL'): 0.6,
+            ('CONSOLIDATION', 'STRONG BUY'): 0.5,  # Significant downgrade
+            ('CONSOLIDATION', 'HOLD'): 1.2,  # Favor holding in consolidation
         }
 
         return adjustments.get((regime, action), 1.0)
@@ -808,6 +842,137 @@ class AdvancedMLTradingSystem:
             recommendations.append("🔄 Risk management suggests holding - signal strength insufficient")
 
         return recommendations
+
+    def _is_acceptable_regime(self, regime: str) -> bool:
+        """Check if a market regime is acceptable for trading."""
+        # Define acceptable regimes for different strategies
+        acceptable_regimes = {
+            'STRONG_BUY': ['VERY_STRONG_TREND', 'STRONG_TREND', 'EMERGING_STRONG_TREND'],
+            'BUY': ['STRONG_TREND', 'EMERGING_STRONG_TREND', 'WEAK_TREND'],
+            'SELL': ['VERY_STRONG_TREND', 'STRONG_TREND', 'EMERGING_STRONG_TREND'],  # Only sell in strong downtrends
+            'HOLD': ['CONSOLIDATION', 'WEAK_TREND']
+        }
+
+        # For general filtering, allow strong and emerging trends
+        generally_acceptable = ['VERY_STRONG_TREND', 'STRONG_TREND', 'EMERGING_STRONG_TREND']
+
+        return regime in generally_acceptable
+
+    def _get_regime_filtered_signals(self, signals: List[Dict]) -> List[Dict]:
+        """Apply regime filtering to trading signals."""
+        filtered_signals = []
+
+        for signal in signals:
+            ticker = signal['ticker']
+            regime_info = self.market_regimes.get(ticker, {})
+
+            # Skip if signal is filtered due to regime
+            if regime_info.get('filtered', False):
+                signal['regime_filtered'] = True
+                signal['regime_filter_reason'] = regime_info.get('filter_reason', 'Unknown')
+                continue
+
+            # Apply regime-based signal adjustment
+            regime = regime_info.get('regime', 'UNKNOWN')
+            base_action = signal['final_action']
+
+            # Filter out weak signals in unfavorable regimes
+            if regime == 'CONSOLIDATION' and base_action in ['STRONG BUY', 'BUY']:
+                if signal['combined_score'] < 70:  # Only very strong signals
+                    signal['regime_filtered'] = True
+                    signal['regime_filter_reason'] = f"Weak signal in {regime}"
+                    continue
+                else:
+                    signal['final_action'] = 'BUY'  # Downgrade from STRONG BUY
+
+            # Avoid counter-trend trading in strong trends
+            if regime in ['VERY_STRONG_TREND', 'STRONG_TREND']:
+                # This would need trend direction, simplified for now
+                pass
+
+            filtered_signals.append(signal)
+
+        return filtered_signals
+
+    def _enhance_with_risk_metrics(self, signal: Dict, capital: float) -> Dict:
+        """Enhance signal with comprehensive risk metrics."""
+        ticker = signal['ticker']
+
+        # Calculate additional risk metrics
+        current_price = signal['current_price']
+        atr_value = self._calculate_atr(ticker)
+
+        # Enhanced position sizing with Kelly Criterion
+        historical_win_rate = self.ml_models[ticker]['accuracy'] if ticker in self.ml_models else 0.5
+        ml_confidence = signal['ml_confidence']
+        rl_confidence = signal.get('rl_confidence', 0)
+
+        # Calculate Kelly fraction with confidence adjustment
+        kelly_fraction = self.risk_manager.calculate_kelly_with_confidence(
+            ml_confidence, rl_confidence, historical_win_rate
+        )
+
+        # Apply regime-based Kelly adjustment
+        regime = self.market_regimes.get(ticker, {}).get('regime', 'UNKNOWN')
+        kelly_fraction *= self._get_regime_adjustment(regime, signal['final_action'])
+
+        # Calculate position size with risk limits
+        position_size = self.risk_manager.calculate_position_size(
+            capital,
+            min(0.02, kelly_fraction),  # Use Kelly fraction but cap at 2%
+            current_price,
+            self.risk_manager.calculate_optimal_stop_loss(current_price, atr_value)
+        )
+
+        # Add enhanced risk metrics
+        signal.update({
+            'kelly_fraction': kelly_fraction,
+            'position_size': position_size,
+            'atr_value': atr_value,
+            'regime_adjusted_kelly': kelly_fraction,
+            'risk_score': self._calculate_risk_score(signal, kelly_fraction, regime),
+            'regime': regime,
+            'regime_strength': self.market_regimes.get(ticker, {}).get('strength', 0)
+        })
+
+        return signal
+
+    def _calculate_risk_score(self, signal: Dict, kelly_fraction: float, regime: str) -> float:
+        """Calculate comprehensive risk score (0-100, lower is better)."""
+        risk_score = 50  # Base risk score
+
+        # Kelly fraction risk (0-20 points)
+        if kelly_fraction > 0.25:
+            risk_score += 20
+        elif kelly_fraction > 0.15:
+            risk_score += 10
+        elif kelly_fraction < 0.05:
+            risk_score += 15  # Very low Kelly suggests poor opportunity
+
+        # Regime risk (0-15 points)
+        regime_risk_map = {
+            'VERY_STRONG_TREND': 0,
+            'STRONG_TREND': 2,
+            'EMERGING_STRONG_TREND': 5,
+            'WEAK_TREND': 10,
+            'CONSOLIDATION': 15,
+            'UNKNOWN': 20
+        }
+        risk_score += regime_risk_map.get(regime, 15)
+
+        # Model accuracy risk (0-10 points)
+        accuracy = signal.get('ml_accuracy', 0.5)
+        if accuracy < 0.6:
+            risk_score += 10
+        elif accuracy < 0.7:
+            risk_score += 5
+
+        # Signal strength risk (0-5 points)
+        combined_score = signal.get('combined_score', 0)
+        if combined_score < 30:
+            risk_score += 5
+
+        return min(100, risk_score)
 
     def _get_portfolio_summary(self, capital: float) -> Dict:
         """Get current portfolio summary."""

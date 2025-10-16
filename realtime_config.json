@@ -1,0 +1,60 @@
+{
+  "risk_management": {
+    "enabled": true,
+    "max_portfolio_heat": 20.0,
+    "risk_per_trade": 0.02,
+    "stop_loss_atr_multiplier": 2.0,
+    "correlation_threshold": 0.7,
+    "real_time_monitoring": true,
+    "alert_thresholds": {
+      "portfolio_heat_warning": 15.0,
+      "portfolio_heat_critical": 18.0,
+      "position_loss_warning": -5.0,
+      "position_loss_critical": -10.0
+    }
+  },
+  "alpha_vantage": {
+    "enabled": false,
+    "api_key": "",
+    "symbols": [
+      "TXT.WA",
+      "XTB.WA",
+      "PKN.WA"
+    ],
+    "interval": "1min"
+  },
+  "finnhub": {
+    "enabled": false,
+    "api_key": "",
+    "symbols": [
+      "TXT.WA",
+      "XTB.WA",
+      "PKN.WA"
+    ]
+  },
+  "websocket_feeds": {
+    "enabled": false,
+    "polygon": {
+      "api_key": "",
+      "tickers": [
+        "TXT:WA",
+        "XTB:PL"
+      ]
+    },
+    "finnhub": {
+      "api_key": "",
+      "symbols": [
+        "TXT.WA",
+        "XTB.WA"
+      ]
+    }
+  },
+  "local_feeds": {
+    "enabled": true,
+    "file_paths": [
+      "data/current_prices.csv",
+      "data/live_prices.json"
+    ],
+    "update_interval": 5
+  }
+}

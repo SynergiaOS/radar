@@ -1,0 +1,12 @@
+{
+  "total_stocks": 4,
+  "charts_generated": 4,
+  "charts_directory": "charts",
+  "trend_distribution": {
+    "Wzrostowy": 0,
+    "Spadkowy": 3,
+    "Boczny": 1,
+    "Nieznany": 0
+  },
+  "generation_timestamp": "2025-10-16T20:34:12.889788"
+}

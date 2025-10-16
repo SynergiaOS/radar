@@ -158,3 +158,6 @@ Thumbs.db
 # Output files
 *.csv
 *.log
+
+# Configuration files with credentials
+xtb_config.json

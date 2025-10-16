@@ -3,21 +3,93 @@
 @tailwind utilities;
 
 :root {
+  /* Shadcn UI CSS Variables - Light Mode */
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222.2 84% 4.9%;
+
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+
+  --accent: 210 40% 96%;
+  --accent-foreground: 222.2 84% 4.9%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 222.2 84% 4.9%;
+
+  /* Trading-specific colors */
+  --up: 142 76% 36%;
+  --down: 0 84% 60%;
+  --neutral: 210 40% 46%;
+
+  --surface: 220 43% 97%;
+  --surface-light: 220 43% 94%;
+  --text-primary: 222.2 84% 4.9%;
+  --text-secondary: 215.4 16.3% 46.9%;
+  --actions-buy: 142 76% 36%;
+  --actions-sell: 0 84% 60%;
+  --actions-hold: 45 93% 58%;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Shadcn UI CSS Variables - Dark Mode (TradingView-like theme) */
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
-  }
-}
 
-body {
-  color: rgb(var(--foreground));
-  background: linear-gradient(135deg, #131722 0%, #1e1e1e 100%);
-  font-family: 'Inter', system-ui, sans-serif;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+
+    /* Trading-specific colors - Dark Mode */
+    --up: 142 76% 36%;
+    --down: 0 84% 60%;
+    --neutral: 210 40% 46%;
+
+    --surface: 217.2 32.6% 17.5%;
+    --surface-light: 217.2 32.6% 20%;
+    --text-primary: 210 40% 98%;
+    --text-secondary: 215 20.2% 65.1%;
+    --actions-buy: 142 76% 36%;
+    --actions-sell: 0 84% 60%;
+    --actions-hold: 45 93% 58%;
+  }
 }
 
 * {
@@ -29,7 +101,9 @@ html {
 }
 
 body {
-  @apply bg-background text-foreground;
+  color: #d1d4dc;
+  background: #1e1e1e;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
 /* Custom scrollbar styling */
@@ -81,8 +155,88 @@ body {
   background-color: #ef5350;
 }
 
-/* Card component base styles */
+/* TradingView specific styles */
 @layer components {
+  .tv-chart-container {
+    @apply bg-gray-900 border border-gray-700 rounded-none;
+    height: 100%;
+    position: relative;
+  }
+
+  .tv-toolbar {
+    @apply bg-gray-800 border-b border-gray-700 px-3 py-2;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .tv-toolbar-button {
+    @apply px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors;
+  }
+
+  .tv-sidebar {
+    @apply bg-gray-800 border-r border-gray-700;
+    width: 280px;
+    height: 100%;
+  }
+
+  .tv-watchlist {
+    @apply bg-gray-900 border border-gray-700 rounded;
+  }
+
+  .tv-symbol-item {
+    @apply px-3 py-2 border-b border-gray-700 hover:bg-gray-800 transition-colors cursor-pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tv-symbol-item:hover {
+    @apply bg-gray-800;
+  }
+
+  .tv-up {
+    color: #26a69a;
+  }
+
+  .tv-down {
+    color: #ef5350;
+  }
+
+  .tv-neutral {
+    color: #9e9e9e;
+  }
+
+  .tv-panel {
+    @apply bg-gray-900 border border-gray-700;
+    border-radius: 4px;
+  }
+
+  .tv-panel-header {
+    @apply bg-gray-800 border-b border-gray-700 px-3 py-2 text-sm font-medium text-gray-300;
+  }
+
+  .tv-panel-content {
+    @apply p-3;
+  }
+
+  .tv-input {
+    @apply bg-gray-800 border border-gray-600 text-gray-300 px-3 py-1 rounded text-sm focus:outline-none focus:border-blue-500;
+  }
+
+  .tv-select {
+    @apply bg-gray-800 border border-gray-600 text-gray-300 px-3 py-1 rounded text-sm focus:outline-none focus:border-blue-500;
+  }
+
+  .tv-button-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors;
+  }
+
+  .tv-button-secondary {
+    @apply bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded text-sm font-medium transition-colors;
+  }
+
+  /* Card component base styles */
   .card {
     @apply bg-surface border border-border rounded-lg shadow-card;
   }

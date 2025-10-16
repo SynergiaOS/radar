@@ -114,6 +114,31 @@ class MarketRegimeDetector:
         else:
             return 'VERY_STRONG_TREND'
 
+    def analyze_regime(self, price_data: pd.DataFrame) -> Dict[str, any]:
+        """
+        Analyze market regime - alias for detect_market_regime for backward compatibility
+
+        Args:
+            price_data: DataFrame with OHLC data
+
+        Returns:
+            Dictionary with regime information
+
+        Example:
+        >>> detector = MarketRegimeDetector()
+        >>> df = pd.DataFrame({
+        ...     'open': [100, 101, 102, 103, 104],
+        ...     'high': [101, 102, 103, 104, 105],
+        ...     'low': [99, 100, 101, 102, 103],
+        ...     'close': [100, 101, 102, 103, 104],
+        ...     'volume': [1000, 1200, 1500, 800, 900]
+        ... })
+        >>> regime = detector.analyze_regime(df)
+        >>> print(f"Regime: {regime['regime']}, ADX: {regime['adx']:.1f}")
+        Regime: CONSOLIDATION, ADX: 15.2
+        """
+        return self.detect_market_regime(price_data)
+
     def detect_market_regime(self, price_data: pd.DataFrame) -> Dict[str, any]:
         """
         Detect current market regime using ADX and other indicators

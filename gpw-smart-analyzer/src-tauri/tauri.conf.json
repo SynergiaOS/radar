@@ -13,6 +13,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "GPW Smart Analyzer",
         "width": 1400,
         "height": 900,

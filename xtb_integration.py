@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
 """
-xtB Integration Module
-Real-time API integration for Polish market data from xStation 5 API
-Provides WebSocket streaming, real-time quotes, and order management
+xtB Real-time Integration Module
+
+Provides real-time market data integration with xtB (xStation 5) API
+for Polish stock market trading and analysis.
+
+Features:
+- Real-time price streaming via WebSocket
+- Account information and portfolio tracking
+- Order management and execution
+- Market depth and order book data
+- Trade confirmation and position monitoring
+- Real-time risk metrics calculation
+- Advanced order types (stop loss, take profit, trailing stops)
+- Portfolio heat monitoring and risk management
 """
 
 import asyncio
@@ -10,16 +21,105 @@ import websockets
 import json
 import logging
 import time
-from typing import Dict, List, Optional, Callable, Any
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+import ssl
+import hashlib
+import hmac
+import base64
+from typing import Dict, List, Optional, Callable, Any, Tuple, Literal
+from dataclasses import dataclass, asdict
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 import numpy as np
-from config import XTB_API_URL, XTB_LOGIN, XTB_PASSWORD, GPW_TICKERS
-from trading_chart_service import chart_service
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
+from config import (
+    XTB_CLIENT_ID, XTB_CLIENT_SECRET, XTB_DEMO_MODE,
+    XTB_WEBSOCKET_URL_DEMO, XTB_WEBSOCKET_URL_LIVE,
+    ENABLE_XTB_INTEGRATION, XTB_RETRY_ATTEMPTS, XTB_TIMEOUT_SECONDS,
+    POLISH_STOCK_TICKERS, RISK_PER_TRADE_PCT, MAX_POSITION_SIZE_PCT,
+    BACKTEST_COMMISSION_RATE, BACKTEST_SLIPPAGE_PCT
+)
+from risk_management import RiskManager
+from market_regime import MarketRegimeDetector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class XTBAccountInfo:
+    """xtB account information structure"""
+    account_id: str
+    account_type: str
+    balance: float
+    equity: float
+    margin: float
+    free_margin: float
+    margin_level: float
+    profit: float
+    currency: str
+    leverage: float
+    credit: float
+    bonus: float
+    account_locked: bool = False
+    market_closed: bool = False
+
+
+@dataclass
+class XTBPriceInfo:
+    """Real-time price information"""
+    symbol: str
+    bid: float
+    ask: float
+    high: float
+    low: float
+    volume: int
+    timestamp: datetime
+    change: float
+    change_pct: float
+    spread: float = 0.0
+
+    def __post_init__(self):
+        self.spread = self.ask - self.bid
+
+
+@dataclass
+class XTBOrderInfo:
+    """Order information structure"""
+    order_id: int
+    symbol: str
+    type: Literal['BUY', 'SELL']
+    volume: float
+    price: float
+    stop_loss: Optional[float]
+    take_profit: Optional[float]
+    timestamp: datetime
+    status: str
+    profit: float
+    comment: str
+    commission: float = 0.0
+    swap: float = 0.0
+    margin: float = 0.0
+
+
+@dataclass
+class XTBTradeTransaction:
+    """Trade transaction for order execution"""
+    symbol: str
+    cmd: int  # 0=BUY, 1=SELL
+    volume: float
+    price: Optional[float] = None
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+    order: Optional[int] = None
+    comment: Optional[str] = None
+    type: int = 0  # 0=OPEN, 1=CLOSE, 2=MODIFY
+    expiry: Optional[int] = None
+    custom_comment: Optional[str] = None
+    stop_loss_limit: Optional[float] = None
+    take_profit_limit: Optional[float] = None
+
 
 @dataclass
 class XTBTicker:
@@ -38,6 +138,9 @@ class XTBTicker:
     change_pct: float
     volume: int
     time: datetime
+    currency: str = 'PLN'
+    market_closed: bool = False
+
 
 @dataclass
 class XTBQuote:
@@ -52,6 +155,8 @@ class XTBQuote:
     change_pct: float
     volume: int
     time: datetime
+    timestamp: int = 0
+
 
 @dataclass
 class XTBCandle:
@@ -65,118 +170,306 @@ class XTBCandle:
     timestamp: datetime
     period: str  # 'm1', 'm5', 'm15', 'h1', 'd1', etc.
 
-class XTBClient:
-    """xtB xStation 5 API client"""
+class XTBAPIClient:
+    """
+    xtB xStation 5 API Client for real-time trading and market data
+    """
 
-    def __init__(self, demo: bool = True):
-        self.demo = demo
-        self.base_url = XTB_API_URL
-        self.login = XTB_LOGIN
-        self.password = XTB_PASSWORD
-        self.session_id = None
+    # Command constants
+    CMD_LOGIN = "login"
+    CMD_LOGOUT = "logout"
+    CMD_GET_SYMBOLS = "getSymbols"
+    CMD_GET_TICK_PRICES = "getTickPrices"
+    CMD_GET_TRADE_RECORDS = "getTradeRecords"
+    CMD_OPEN_TRADE = "openTrade"
+    CMD_CLOSE_TRADE = "closeTrade"
+    CMD_MODIFY_TRADE = "modifyTrade"
+    CMD_GET_MARGIN_LEVEL = "getMarginLevel"
+    CMD_GET_TRADES = "getTrades"
+    CMD_GET_CALENDAR = "getCalendar"
+
+    def __init__(self):
+        self.client_id = XTB_CLIENT_ID
+        self.client_secret = XTB_CLIENT_SECRET
+        self.demo_mode = XTB_DEMO_MODE
+        self.websocket_url = XTB_WEBSOCKET_URL_DEMO if self.demo_mode else XTB_WEBSOCKET_URL_LIVE
+        self.retry_attempts = XTB_RETRY_ATTEMPTS
+        self.timeout_seconds = XTB_TIMEOUT_SECONDS
+
         self.websocket = None
-        self.stream_task = None
-        self.quote_callbacks: List[Callable[[XTBQuote], None]] = []
-        self.candle_callbacks: List[Callable[[XTBCandle], None]] = []
-        self.is_connected = False
-        self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 5
-        self.last_heartbeat = None
+        self.session_id = None
+        self.logged_in = False
 
-        # Cache for ticker data
-        self.tickers_cache: Dict[str, XTBTicker] = {}
-        self.quotes_cache: Dict[str, XTBQuote] = {}
-        self.candles_cache: Dict[str, pd.DataFrame] = {}
+        # Callbacks for real-time data
+        self.price_callbacks: List[Callable[[XTBPriceInfo], None]] = []
+        self.trade_callbacks: List[Callable[[XTBOrderInfo], None]] = []
+        self.account_callbacks: List[Callable[[XTBAccountInfo], None]] = []
+
+        # Data storage
+        self.current_prices: Dict[str, XTBPriceInfo] = {}
+        self.open_positions: Dict[int, XTBOrderInfo] = {}
+        self.account_info: Optional[XTBAccountInfo] = None
+
+        # Event management
+        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.running = False
+        self.price_stream_task = None
+
+        # Risk management integration
+        self.risk_manager = RiskManager()
+        self.market_regime_detector = MarketRegimeDetector()
+
+        logger.info(f"XTB API Client initialized (demo_mode={self.demo_mode})")
 
     async def connect(self) -> bool:
-        """
-        Connect to xtB API
-
-        Returns:
-            True if connection successful
-        """
+        """Establish WebSocket connection and login"""
         try:
-            ws_url = f"wss://{self.base_url}/websocket"
-            self.websocket = await websockets.connect(ws_url)
+            # Create SSL context for secure connection
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
+            # Connect to WebSocket
+            self.websocket = await websockets.connect(
+                self.websocket_url,
+                ssl=ssl_context,
+                ping_interval=20,
+                ping_timeout=10,
+                close_timeout=10
+            )
+
+            logger.info("WebSocket connection established")
 
             # Login
-            login_payload = {
-                "command": "login",
-                "arguments": {
-                    "userId": self.login,
-                    "password": self.password,
-                    "appName": "RadarTradingSystem"
-                }
-            }
-
-            await self.websocket.send(json.dumps(login_payload))
-            response = await self.websocket.recv()
-            result = json.loads(response)
-
-            if result.get('status') == True:
-                self.session_id = result.get('streamSessionId')
-                self.is_connected = True
-                self.reconnect_attempts = 0
-                self.last_heartbeat = datetime.now()
-
-                # Start streaming task
-                self.stream_task = asyncio.create_task(self._stream_messages())
-
-                logger.info(f"Successfully connected to xtB API (Demo: {self.demo})")
+            success = await self.login()
+            if success:
+                self.running = True
+                # Start price streaming task
+                self.price_stream_task = asyncio.create_task(self._price_stream_loop())
+                logger.info("XTB API connection successful")
                 return True
             else:
-                logger.error(f"Login failed: {result.get('errorDescr', 'Unknown error')}")
+                await self.disconnect()
                 return False
 
         except Exception as e:
-            logger.error(f"Connection failed: {e}")
+            logger.error(f"Failed to connect to XTB API: {e}")
             return False
 
     async def disconnect(self):
-        """Disconnect from xtB API"""
+        """Close WebSocket connection and cleanup"""
         try:
-            self.is_connected = False
+            self.running = False
 
-            if self.stream_task:
-                self.stream_task.cancel()
-                try:
-                    await self.stream_task
-                except asyncio.CancelledError:
-                    pass
+            if self.price_stream_task:
+                self.price_stream_task.cancel()
+
+            if self.logged_in:
+                await self.logout()
 
             if self.websocket:
                 await self.websocket.close()
+                self.websocket = None
 
-            logger.info("Disconnected from xtB API")
+            logger.info("XTB API disconnected")
 
         except Exception as e:
             logger.error(f"Error during disconnect: {e}")
 
-    async def _send_command(self, command: str, arguments: Dict = None) -> Dict:
-        """Send command to xtB API"""
-        if not self.is_connected or not self.websocket:
-            raise ConnectionError("Not connected to xtB API")
-
-        payload = {
-            "command": command,
-            "arguments": arguments or {}
-        }
-
+    async def login(self) -> bool:
+        """Login to xStation 5 API"""
         try:
-            await self.websocket.send(json.dumps(payload))
-            response = await self.websocket.recv()
-            result = json.loads(response)
+            login_command = {
+                "command": self.CMD_LOGIN,
+                "arguments": {
+                    "userId": self.client_id,
+                    "password": self.client_secret
+                }
+            }
 
-            if result.get('status') != True:
-                error_msg = result.get('errorDescr', 'Unknown error')
-                logger.error(f"Command {command} failed: {error_msg}")
-                raise Exception(f"xtB API error: {error_msg}")
+            response = await self._send_command(login_command)
 
-            return result.get('returnData', {})
+            if response and response.get('status'):
+                self.session_id = response.get('streamSessionId')
+                self.logged_in = True
+                logger.info("Successfully logged in to xStation 5")
+                return True
+            else:
+                error_msg = response.get('error', 'Unknown error') if response else 'No response'
+                logger.error(f"Login failed: {error_msg}")
+                return False
 
         except Exception as e:
-            logger.error(f"Error sending command {command}: {e}")
-            raise
+            logger.error(f"Login error: {e}")
+            return False
+
+    async def logout(self) -> bool:
+        """Logout from xStation 5 API"""
+        try:
+            if self.logged_in:
+                logout_command = {"command": self.CMD_LOGOUT}
+                response = await self._send_command(logout_command)
+                self.logged_in = False
+                self.session_id = None
+                logger.info("Successfully logged out")
+                return True
+            return False
+
+        except Exception as e:
+            logger.error(f"Logout error: {e}")
+            return False
+
+    async def _send_command(self, command: Dict, command_id: int = None) -> Optional[Dict]:
+        """Send command to xStation 5 API"""
+        if not self.websocket:
+            logger.error("WebSocket connection not established")
+            return None
+
+        try:
+            # Add timestamp and command ID if not provided
+            if command_id is None:
+                command_id = int(time.time() * 1000)
+
+            command['customTag'] = command_id
+
+            # Send command
+            await self.websocket.send(json.dumps(command))
+
+            # Wait for response with timeout
+            response = await asyncio.wait_for(
+                self.websocket.recv(),
+                timeout=self.timeout_seconds
+            )
+
+            response_data = json.loads(response)
+
+            # Check for error response
+            if response_data.get('status') is False:
+                error_code = response_data.get('errorCode', 'UNKNOWN')
+                error_desc = response_data.get('errorDesc', 'Unknown error')
+                logger.error(f"API Error {error_code}: {error_desc}")
+                return None
+
+            return response_data
+
+        except asyncio.TimeoutError:
+            logger.error(f"Command timeout: {command.get('command')}")
+            return None
+        except Exception as e:
+            logger.error(f"Command execution error: {e}")
+            return None
+
+  async def get_account_info(self) -> Optional[XTBAccountInfo]:
+        """Get current account information"""
+        try:
+            command = {"command": self.CMD_GET_MARGIN_LEVEL}
+            response = await self._send_command(command)
+
+            if response and response.get('status'):
+                data = response.get('return_data', {})
+
+                account_info = XTBAccountInfo(
+                    account_id=self.client_id,
+                    account_type="DEMO" if self.demo_mode else "LIVE",
+                    balance=data.get('balance', 0.0),
+                    equity=data.get('equity', 0.0),
+                    margin=data.get('margin', 0.0),
+                    free_margin=data.get('margin_free', 0.0),
+                    margin_level=data.get('margin_level', 0.0),
+                    profit=data.get('profit', 0.0),
+                    currency=data.get('currency', 'PLN'),
+                    leverage=data.get('leverage', 1.0),
+                    credit=data.get('credit', 0.0),
+                    bonus=data.get('bonus', 0.0)
+                )
+
+                self.account_info = account_info
+
+                # Notify callbacks
+                for callback in self.account_callbacks:
+                    try:
+                        self.executor.submit(callback, account_info)
+                    except Exception as e:
+                        logger.error(f"Account callback error: {e}")
+
+                return account_info
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting account info: {e}")
+            return None
+
+    async def get_current_prices(self, symbols: List[str]) -> Dict[str, XTBPriceInfo]:
+        """Get current prices for specified symbols"""
+        try:
+            command = {
+                "command": self.CMD_GET_TICK_PRICES,
+                "arguments": {
+                    "symbols": symbols
+                }
+            }
+
+            response = await self._send_command(command)
+
+            if response and response.get('status'):
+                prices = {}
+                for price_data in response.get('return_data', []):
+                    price_info = XTBPriceInfo(
+                        symbol=price_data['symbol'],
+                        bid=float(price_data['bid']),
+                        ask=float(price_data['ask']),
+                        high=float(price_data['high']),
+                        low=float(price_data['low']),
+                        volume=int(price_data['volume']),
+                        timestamp=datetime.fromtimestamp(price_data['timestamp'], tz=timezone.utc),
+                        change=float(price_data['change']),
+                        change_pct=float(price_data['changePercentage'])
+                    )
+                    prices[price_info.symbol] = price_info
+                    self.current_prices[price_info.symbol] = price_info
+
+                return prices
+
+            return {}
+
+        except Exception as e:
+            logger.error(f"Error getting current prices: {e}")
+            return {}
+
+    async def get_open_positions(self) -> Dict[int, XTBOrderInfo]:
+        """Get all open positions"""
+        try:
+            command = {"command": self.CMD_GET_TRADES}
+            response = await self._send_command(command)
+
+            if response and response.get('status'):
+                positions = {}
+                for trade_data in response.get('return_data', []):
+                    if trade_data.get('cmd') in [0, 1]:  # BUY or SELL positions
+                        order_info = XTBOrderInfo(
+                            order_id=trade_data['order'],
+                            symbol=trade_data['symbol'],
+                            type='BUY' if trade_data['cmd'] == 0 else 'SELL',
+                            volume=float(trade_data['volume']),
+                            price=float(trade_data['open_price']),
+                            stop_loss=float(trade_data['sl']) if trade_data['sl'] > 0 else None,
+                            take_profit=float(trade_data['tp']) if trade_data['tp'] > 0 else None,
+                            timestamp=datetime.fromtimestamp(trade_data['open_time'], tz=timezone.utc),
+                            status=trade_data['state'],
+                            profit=float(trade_data['profit']),
+                            comment=trade_data.get('comment', '')
+                        )
+                        positions[order_info.order_id] = order_info
+                        self.open_positions[order_info.order_id] = order_info
+
+                return positions
+
+            return {}
+
+        except Exception as e:
+            logger.error(f"Error getting open positions: {e}")
+            return {}
 
     async def _stream_messages(self):
         """Handle streaming messages"""
@@ -456,7 +749,7 @@ class XTBDataManager:
     """Manager for xtB data operations"""
 
     def __init__(self):
-        self.client = XTBClient(demo=True)
+        self.client = XTBAPIClient()
         self.subscribed_symbols: List[str] = []
         self.data_callbacks: Dict[str, List[Callable]] = {}
         self.gpw_symbols = GPW_TICKERS

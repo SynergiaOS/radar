@@ -4,8 +4,16 @@ import numpy as np
 import re
 import time
 from typing import Optional, Dict, Any
-from config import PROFITABILITY_THRESHOLD, USE_DECODO_API
+from config import (
+    PROFITABILITY_THRESHOLD, USE_DECODO_API, TREND_DETECTION_ENABLED,
+    MA_HISTORY_DAYS, USE_CQG_API, PB_THRESHOLD, ENABLE_PB_FILTER
+)
 from decodo_api import DecodoAPIClient
+import technical_analysis
+import cqg_api
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def retry_with_backoff(func, max_retries: int = 3, base_delay: float = 0.5):
@@ -40,7 +48,8 @@ def retry_with_backoff(func, max_retries: int = 3, base_delay: float = 0.5):
 
 def analyze_company_fundamentals(ticker: str) -> Optional[Dict[str, Any]]:
     """
-    Analyze company fundamentals including profitability (ROE) and valuation (P/E ratio).
+    Analyze company fundamentals including profitability (ROE), valuation (P/E, P/B),
+    and technical indicators (moving averages, trend).
 
     Args:
         ticker: Stock ticker symbol (e.g., 'PKN.WA')
@@ -56,6 +65,14 @@ def analyze_company_fundamentals(ticker: str) -> Optional[Dict[str, Any]]:
             'current_price': float | None,
             'eps': float | None,
             'pe_ratio': float | None,
+            'book_value_per_share': float | None,
+            'pb_ratio': float | None,
+            'ma5': float | None,
+            'ma10': float | None,
+            'ma20': float | None,
+            'trend': str | None,
+            'trend_label': str | None,
+            'historical_prices': pd.DataFrame | None,
             'profitable': bool,
             'quarter_end': str,
             'data_source': str  # 'decodo' or 'yfinance'
@@ -64,7 +81,9 @@ def analyze_company_fundamentals(ticker: str) -> Optional[Dict[str, Any]]:
     Note:
         ROE (Return on Equity) is calculated as (Net Income / Shareholders' Equity) × 100%
         P/E ratio (Price-to-Earnings) is calculated as Current Price / Trailing EPS
-        Both ROE and P/E may be None if required data is unavailable.
+        P/B ratio (Price-to-Book) is calculated as Current Price / Book Value per Share
+        Moving averages and trend are calculated when TREND_DETECTION_ENABLED is True
+        All financial ratios may be None if required data is unavailable.
     """
     try:
         # Try Decodo API first if enabled, otherwise use yfinance
@@ -121,20 +140,84 @@ def _analyze_with_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
 
         quarterly_balance_sheet = retry_with_backoff(get_balance_sheet)
 
-        # Find the most recent common column between financials and balance sheet
-        latest_col = None
-        if not quarterly_balance_sheet.empty:
-            common_cols = set(quarterly_financials.columns) & set(quarterly_balance_sheet.columns)
-            if common_cols:
-                latest_col = max(common_cols)  # Get the most recent date
-            else:
-                latest_col = quarterly_financials.columns[0]  # Fall back to financials
-        else:
-            latest_col = quarterly_financials.columns[0]  # Fall back to financials
+        # Deterministic latest quarter selection from quarterly_financials
+        fin_cols = list(quarterly_financials.columns)
+        if not fin_cols:
+            print(f"Warning: No columns in quarterly financials for {ticker}")
+            return None
 
-        # Get the latest quarter data
-        latest_quarter = quarterly_financials[latest_col]
-        latest_balance_quarter = quarterly_balance_sheet[latest_col] if not quarterly_balance_sheet.empty and latest_col in quarterly_balance_sheet.columns else None
+        # Determine latest_fin_col deterministically
+        try:
+            # Check if columns are datetime-like
+            first_col = fin_cols[0]
+            if hasattr(first_col, 'strftime') or hasattr(first_col, 'toordinal'):
+                latest_fin_col = max(fin_cols)
+            else:
+                # Parse to datetime for deterministic selection
+                parsed_fin = pd.to_datetime(fin_cols, errors='coerce')
+                valid_dates = parsed_fin[~pd.isna(parsed_fin)]
+                if valid_dates.empty:
+                    print(f"Warning: Could not parse any dates from quarterly financials columns for {ticker}")
+                    return None
+                latest_fin_col = fin_cols[valid_dates.idxmax()]
+        except Exception as e:
+            print(f"Warning: Error determining latest financial column for {ticker}: {e}")
+            return None
+
+        # Set latest_quarter and quarter_end from latest_fin_col
+        latest_quarter = quarterly_financials[latest_fin_col]
+        if hasattr(latest_fin_col, 'strftime'):
+            quarter_end = latest_fin_col.strftime('%Y-%m-%d')
+        else:
+            quarter_end = str(latest_fin_col)
+
+        # Balance sheet alignment with deterministic fallback
+        latest_balance_quarter = None
+        if quarterly_balance_sheet.empty:
+            print(f"Warning: No balance sheet data available for {ticker}")
+        else:
+            # Try to align with latest_fin_col
+            if latest_fin_col in quarterly_balance_sheet.columns:
+                latest_balance_quarter = quarterly_balance_sheet[latest_fin_col]
+            else:
+                # Deterministic alternative: choose nearest prior or latest from balance sheet
+                try:
+                    bs_cols = list(quarterly_balance_sheet.columns)
+                    if hasattr(bs_cols[0], 'strftime') or hasattr(bs_cols[0], 'toordinal'):
+                        # Both datetime-like - find nearest prior or latest
+                        parsed_bs = pd.to_datetime(bs_cols, errors='coerce')
+                        valid_bs_dates = parsed_bs[~pd.isna(parsed_bs)]
+
+                        if not valid_bs_dates.empty:
+                            if hasattr(latest_fin_col, 'strftime') or hasattr(latest_fin_col, 'toordinal'):
+                                # Both datetime-like - find nearest prior
+                                latest_fin_datetime = pd.to_datetime(latest_fin_col)
+                                prior_dates = valid_bs_dates[valid_bs_dates <= latest_fin_datetime]
+                                if not prior_dates.empty:
+                                    selected_bs_date = prior_dates.idxmax()
+                                else:
+                                    selected_bs_date = valid_bs_dates.idxmax()
+                                    print(f"Warning: Balance sheet dates after financial date for {ticker}; using latest BS date")
+                            else:
+                                # Financial date not datetime-like - use latest BS
+                                selected_bs_date = valid_bs_dates.idxmax()
+
+                            latest_balance_quarter = quarterly_balance_sheet[bs_cols[valid_bs_dates.index.get_loc(selected_bs_date)]]
+                            print(f"Warning: Balance sheet not aligned for {ticker}; using {selected_bs_date}")
+                        else:
+                            print(f"Warning: Could not parse any dates from balance sheet columns for {ticker}")
+                    else:
+                        # Use deterministic selection from balance sheet columns
+                        parsed_bs = pd.to_datetime(bs_cols, errors='coerce')
+                        valid_bs_dates = parsed_bs[~pd.isna(parsed_bs)]
+                        if not valid_bs_dates.empty:
+                            latest_bs_col = bs_cols[valid_bs_dates.idxmax()]
+                            latest_balance_quarter = quarterly_balance_sheet[latest_bs_col]
+                            print(f"Warning: Balance sheet not aligned for {ticker}; using latest BS column {latest_bs_col}")
+                        else:
+                            print(f"Warning: Could not parse balance sheet dates for {ticker}")
+                except Exception as e:
+                    print(f"Warning: Error aligning balance sheet for {ticker}: {e}")
 
         # Extract net income with prioritized labels and regex fallback
         net_income = None
@@ -211,9 +294,6 @@ def _analyze_with_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
         company_info = retry_with_backoff(get_company_info)
         company_name = company_info.get('longName', ticker) if company_info else ticker
 
-        # Get quarter end date
-        quarter_end = latest_quarter.name.strftime('%Y-%m-%d') if hasattr(latest_quarter.name, 'strftime') else str(latest_quarter.name)
-
         # Fetch current stock price with retry
         current_price = None
         def get_current_price():
@@ -275,6 +355,117 @@ def _analyze_with_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
             print(f"Warning: Invalid net income data for {ticker}")
             return None
 
+        # Calculate Book Value per Share and P/B ratio
+        book_value_per_share = None
+        pb_ratio = None
+
+        try:
+            # Try to get book value per share directly from stock.info
+            book_value_direct = company_info.get('bookValue') if company_info else None
+            if book_value_direct is not None and book_value_direct > 0:
+                book_value_per_share = float(book_value_direct)
+            else:
+                # Calculate from equity and shares outstanding
+                if equity is not None and equity > 0:
+                    # Try multiple shares outstanding fields
+                    shares_fields = [
+                        'sharesOutstanding',
+                        'impliedSharesOutstanding',
+                        'commonStockSharesOutstanding',
+                        'shareOutstanding'
+                    ]
+
+                    shares_outstanding = None
+                    for field in shares_fields:
+                        shares_value = company_info.get(field) if company_info else None
+                        if shares_value is not None and shares_value > 0:
+                            shares_outstanding = float(shares_value)
+                            break
+
+                    if shares_outstanding is not None and shares_outstanding > 0:
+                        book_value_per_share = equity / shares_outstanding
+                    else:
+                        print(f"Warning: Could not find valid shares outstanding data for {ticker}")
+                else:
+                    print(f"Warning: No valid equity data for P/B calculation for {ticker}")
+
+            # Calculate P/B ratio if book value per share is available and positive
+            if (book_value_per_share is not None and book_value_per_share > 0 and
+                current_price is not None and current_price > 0):
+                pb_ratio = current_price / book_value_per_share
+            elif book_value_per_share is not None:
+                print(f"Warning: Cannot calculate P/B ratio for {ticker} (book value: {book_value_per_share:.2f}, price: {current_price})")
+            else:
+                print(f"Warning: No valid book value data for P/B calculation for {ticker}")
+
+        except (ValueError, TypeError, ZeroDivisionError) as e:
+            print(f"Warning: Error calculating P/B ratio for {ticker}: {str(e)}")
+            book_value_per_share = None
+            pb_ratio = None
+
+        # Technical Analysis
+        technical_indicators = {
+            'ma5': None,
+            'ma10': None,
+            'ma20': None,
+            'trend': 'unknown',
+            'trend_label': technical_analysis.get_trend_label('unknown'),
+            'historical_prices': None
+        }
+
+        if TREND_DETECTION_ENABLED:
+            try:
+                historical_prices = None
+
+                # Try CQG API first if enabled
+                if USE_CQG_API:
+                    try:
+                        cqg_client = cqg_api.create_cqg_client()
+                        if cqg_client.is_configured():
+                            historical_prices = cqg_client.get_historical_prices(ticker, MA_HISTORY_DAYS)
+                            if historical_prices is not None:
+                                logger.info(f"Retrieved {len(historical_prices)} days from CQG for {ticker}")
+                            else:
+                                logger.warning(f"CQG API returned no data for {ticker}")
+                        else:
+                            logger.info(f"CQG API not configured for {ticker}")
+                    except Exception as e:
+                        logger.warning(f"CQG API error for {ticker}: {e}")
+
+                # Fallback to yfinance if CQG failed or is disabled
+                if historical_prices is None:
+                    try:
+                        hist_data = stock.history(period=f"{MA_HISTORY_DAYS}d")
+                        if not hist_data.empty:
+                            historical_prices = hist_data
+                            logger.info(f"Retrieved {len(historical_prices)} days from yfinance for {ticker}")
+                        else:
+                            logger.warning(f"No historical data available from yfinance for {ticker}")
+                    except Exception as e:
+                        logger.warning(f"Error fetching historical data from yfinance for {ticker}: {e}")
+
+                # Analyze technical indicators if we have historical data
+                if historical_prices is not None and not historical_prices.empty:
+                    technical_indicators = technical_analysis.analyze_technical_indicators(historical_prices)
+                    if technical_indicators:
+                        logger.info(f"Technical analysis completed for {ticker}: trend={technical_indicators.get('trend')}")
+                    else:
+                        logger.warning(f"Technical analysis failed for {ticker}")
+                else:
+                    logger.warning(f"No historical data available for technical analysis of {ticker}")
+
+            except Exception as e:
+                logger.error(f"Error in technical analysis for {ticker}: {e}")
+                # Continue with None values for technical indicators
+                technical_indicators = {
+                    'ma5': None,
+                    'ma10': None,
+                    'ma20': None,
+                    'trend': 'unknown',
+                    'trend_label': technical_analysis.get_trend_label('unknown'),
+                    'historical_prices': None
+                }
+
         # Determine profitability using the validated float value
         profitable = net_income_float > PROFITABILITY_THRESHOLD
 
@@ -287,6 +478,14 @@ def _analyze_with_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
             'current_price': float(current_price) if current_price is not None else None,
             'eps': float(eps) if eps is not None else None,
             'pe_ratio': float(pe_ratio) if pe_ratio is not None else None,
+            'book_value_per_share': float(book_value_per_share) if book_value_per_share is not None else None,
+            'pb_ratio': float(pb_ratio) if pb_ratio is not None else None,
+            'ma5': technical_indicators.get('ma5'),
+            'ma10': technical_indicators.get('ma10'),
+            'ma20': technical_indicators.get('ma20'),
+            'trend': technical_indicators.get('trend'),
+            'trend_label': technical_indicators.get('trend_label'),
+            'historical_prices': technical_indicators.get('historical_prices'),
             'profitable': profitable,
             'quarter_end': quarter_end,
             'data_source': 'yfinance'

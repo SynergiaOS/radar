@@ -19,7 +19,10 @@ class TradingChartService:
             'BB': self.calculate_bollinger_bands,
             'VWAP': self.calculate_vwap,
             'ATR': self.calculate_atr,
-            'Volume': self.get_volume_data
+            'Volume': self.get_volume_data,
+            'ADX': self.calculate_adx_indicator,
+            'DI': self.calculate_directional_indicators,
+            'Market_Regime': self.calculate_market_regime
         }
 
     def get_stock_data(self, ticker, period='1y', interval='1d'):
@@ -89,11 +92,27 @@ class TradingChartService:
             # ATR
             df['ATR_14'] = self.calculate_atr(df, 14)
 
+            # ADX and Directional Indicators
+            adx_data = self.calculate_adx_indicator(df)
+            df['ADX_14'] = adx_data['ADX']
+            df['DI_Plus'] = adx_data['DI_Plus']
+            df['DI_Minus'] = adx_data['DI_Minus']
+
+            # Market Regime Classification
+            regime_data = self.calculate_market_regime(df)
+            df['Market_Regime'] = regime_data['regime']
+            df['Regime_Strength'] = regime_data['strength']
+
         except Exception as e:
             print(f"Error calculating indicators: {e}")
             # Add basic indicators if calculation fails
             df['SMA_20'] = df['Close'].rolling(window=20).mean()
             df['RSI_14'] = None
+            df['ADX_14'] = None
+            df['DI_Plus'] = None
+            df['DI_Minus'] = None
+            df['Market_Regime'] = 'UNKNOWN'
+            df['Regime_Strength'] = 0
 
         return df
 
@@ -166,7 +185,7 @@ class TradingChartService:
                 'v': float(row['Volume'])
             })
 
-        # Prepare indicator data
+        # Prepare indicator data including ADX and DI series
         indicator_data = {}
         for indicator in indicators:
             if indicator in df.columns:
@@ -177,6 +196,45 @@ class TradingChartService:
                     }
                     for idx, row in df.iterrows()
                 ]
+
+        # Handle special case for DI indicators - if 'DI' is requested, include both DI_Plus and DI_Minus
+        if 'DI' in indicators:
+            if 'DI_Plus' in df.columns:
+                indicator_data['DI_Plus'] = [
+                    {
+                        'x': int(idx.timestamp() * 1000),
+                        'y': float(row['DI_Plus']) if pd.notna(row['DI_Plus']) else None
+                    }
+                    for idx, row in df.iterrows()
+                ]
+            if 'DI_Minus' in df.columns:
+                indicator_data['DI_Minus'] = [
+                    {
+                        'x': int(idx.timestamp() * 1000),
+                        'y': float(row['DI_Minus']) if pd.notna(row['DI_Minus']) else None
+                    }
+                    for idx, row in df.iterrows()
+                ]
+
+        # Handle Market_Regime with numeric encoding for charting
+        if 'Market_Regime' in indicators and 'Market_Regime' in df.columns:
+            # Convert regime strings to numeric values for charting
+            regime_mapping = {
+                'CONSOLIDATION': 1,
+                'WEAK_TREND': 2,
+                'STRONG_TREND': 3,
+                'EMERGING_STRONG_TREND': 4,
+                'VERY_STRONG_TREND': 5,
+                'UNKNOWN': 0,
+                'INSUFFICIENT_DATA': 0
+            }
+            indicator_data['Market_Regime'] = [
+                {
+                    'x': int(idx.timestamp() * 1000),
+                    'y': regime_mapping.get(row['Market_Regime'], 0)
+                }
+                for idx, row in df.iterrows()
+            ]
 
         return {
             'info': data['info'],
@@ -210,6 +268,76 @@ class TradingChartService:
                     ]
                 }
         return results
+
+    def calculate_adx_indicator(self, df, period=14):
+        """Calculate ADX (Average Directional Index) using ta library."""
+        try:
+            if len(df) < period:
+                return {
+                    'ADX': None,
+                    'DI_Plus': None,
+                    'DI_Minus': None
+                }
+
+            adx_indicator = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=period)
+            return {
+                'ADX': adx_indicator.adx(),
+                'DI_Plus': adx_indicator.adx_pos(),
+                'DI_Minus': adx_indicator.adx_neg()
+            }
+        except Exception as e:
+            print(f"Error calculating ADX: {e}")
+            return {
+                'ADX': None,
+                'DI_Plus': None,
+                'DI_Minus': None
+            }
+
+    def calculate_directional_indicators(self, df, period=14):
+        """Calculate Directional Indicators (+DI, -DI)."""
+        return self.calculate_adx_indicator(df, period)
+
+    def calculate_market_regime(self, df):
+        """Calculate market regime based on ADX values."""
+        try:
+            adx_data = self.calculate_adx_indicator(df)
+            adx_value = adx_data['ADX']
+
+            if adx_value is None or pd.isna(adx_value):
+                return {
+                    'regime': 'INSUFFICIENT_DATA',
+                    'strength': 0
+                }
+
+            # Classify market regime based on ADX thresholds
+            if adx_value < 20:
+                regime = 'CONSOLIDATION'
+                strength = adx_value / 20  # 0-1 scale
+            elif adx_value < 25:
+                regime = 'WEAK_TREND'
+                strength = (adx_value - 20) / 5  # 0-1 scale
+            elif adx_value < 40:
+                regime = 'STRONG_TREND'
+                strength = (adx_value - 25) / 15  # 0-1 scale
+            elif adx_value < 60:
+                regime = 'EMERGING_STRONG_TREND'
+                strength = (adx_value - 40) / 20  # 0-1 scale
+            else:
+                regime = 'VERY_STRONG_TREND'
+                strength = min(1.0, (adx_value - 60) / 40 + 1)  # 1-2 scale but capped
+
+            return {
+                'regime': regime,
+                'strength': strength
+            }
+
+        except Exception as e:
+            print(f"Error calculating market regime: {e}")
+            return {
+                'regime': 'UNKNOWN',
+                'strength': 0
+            }
+
 
 # Global chart service instance
 chart_service = TradingChartService()

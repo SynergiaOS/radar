@@ -16,7 +16,40 @@ export interface StockInfo {
   change_percent: number
 }
 
+export interface CandlestickData {
+  x: number  // milliseconds timestamp
+  o: number  // open
+  h: number  // high
+  l: number  // low
+  c: number  // close
+  v: number  // volume
+}
+
+export interface IndicatorData {
+  x: number  // milliseconds timestamp
+  y: number | null
+}
+
+export interface VolumeData {
+  x: number  // milliseconds timestamp
+  y: number  // volume value
+}
+
+export interface ChartResponse {
+  info: StockInfo
+  candlestick: CandlestickData[]
+  volume: VolumeData[]
+  indicators: Record<string, IndicatorData[]>
+}
+
 export interface StockData {
+  ticker: string
+  data: OHLCVData[]
+  info: StockInfo
+}
+
+// Keep the old interface for backward compatibility, but prefer ChartResponse for new code
+export interface LegacyStockData {
   ticker: string
   data: OHLCVData[]
   info: StockInfo

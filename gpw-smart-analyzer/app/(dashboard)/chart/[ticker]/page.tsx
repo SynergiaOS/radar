@@ -4,6 +4,8 @@ import { PatternOverlay } from '@/components/charts/PatternOverlay'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { notFound } from 'next/navigation'
+import { useState } from 'react'
+import { ISeriesApi } from 'lightweight-charts'
 
 interface ChartPageProps {
   params: {
@@ -13,6 +15,11 @@ interface ChartPageProps {
 
 export default function ChartPage({ params }: ChartPageProps) {
   const ticker = params.ticker
+  const [candlestickSeries, setCandlestickSeries] = useState<ISeriesApi<'Candlestick'> | null>(null)
+
+  const handleChartReady = ({ candlestickSeries: series }: { candlestickSeries: ISeriesApi<'Candlestick'> }) => {
+    setCandlestickSeries(series)
+  }
 
   // Validate ticker format
   if (!ticker || !ticker.match(/^[A-Z]{2,4}\.WA$/)) {
@@ -48,8 +55,8 @@ export default function ChartPage({ params }: ChartPageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
           <div className="space-y-4">
-            <TradingChart ticker={ticker} />
-            <PatternOverlay ticker={ticker} />
+            <TradingChart ticker={ticker} onReady={handleChartReady} />
+            <PatternOverlay ticker={ticker} candlestickSeries={candlestickSeries} />
           </div>
         </div>
 

@@ -1,14 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Target, TrendingUp, AlertTriangle } from 'lucide-react'
+import { ISeriesApi } from 'lightweight-charts'
+import { Pattern, SupportResistanceLevel } from '@/types/pattern'
+import { PatternAnnotation } from '@/types/chart'
 
 interface PatternOverlayProps {
   ticker: string
-  onPatternDetected?: (pattern: any) => void
+  candlestickSeries?: ISeriesApi<'Candlestick'> | null
+  onPatternDetected?: (pattern: Pattern) => void
 }
 
 interface DetectedPattern {
@@ -27,7 +31,7 @@ interface DetectedPattern {
   distance_to_breakout: number
 }
 
-export function PatternOverlay({ ticker, onPatternDetected }: PatternOverlayProps) {
+export function PatternOverlay({ ticker, candlestickSeries, onPatternDetected }: PatternOverlayProps) {
   const [detectedPatterns, setDetectedPatterns] = useState<DetectedPattern[]>([
     {
       id: '1',
@@ -62,6 +66,112 @@ export function PatternOverlay({ ticker, onPatternDetected }: PatternOverlayProp
   ])
 
   const [selectedPattern, setSelectedPattern] = useState<string | null>(null)
+  const priceLinesRef = useRef<any[]>([])
+  const markersRef = useRef<any[]>([])
+
+  // Chart visualization functions
+  const drawPatternOnChart = (pattern: DetectedPattern) => {
+    if (!candlestickSeries) return
+
+    // Clear previous visualizations
+    clearPatternVisualizations()
+
+    const colors = {
+      bullish: '#26a69a',
+      bearish: '#ef5350',
+      neutral: '#ffa726'
+    }
+
+    const color = colors[pattern.direction]
+
+    // Draw support line
+    if (pattern.key_levels.support) {
+      const supportLine = candlestickSeries.createPriceLine({
+        price: pattern.key_levels.support,
+        color: color + '80',
+        lineWidth: 2,
+        lineStyle: 2, // Dashed
+        title: `Support: ${pattern.key_levels.support.toFixed(2)}`
+      })
+      priceLinesRef.current.push(supportLine)
+    }
+
+    // Draw resistance line
+    if (pattern.key_levels.resistance) {
+      const resistanceLine = candlestickSeries.createPriceLine({
+        price: pattern.key_levels.resistance,
+        color: color + '80',
+        lineWidth: 2,
+        lineStyle: 2, // Dashed
+        title: `Resistance: ${pattern.key_levels.resistance.toFixed(2)}`
+      })
+      priceLinesRef.current.push(resistanceLine)
+    }
+
+    // Draw breakout line
+    if (pattern.key_levels.breakout) {
+      const breakoutLine = candlestickSeries.createPriceLine({
+        price: pattern.key_levels.breakout,
+        color: color,
+        lineWidth: 3,
+        title: `Breakout: ${pattern.key_levels.breakout.toFixed(2)}`
+      })
+      priceLinesRef.current.push(breakoutLine)
+    }
+
+    // Add breakout marker at end_date
+    const endTime = new Date(pattern.end_date).getTime() / 1000
+    const marker = {
+      time: endTime,
+      position: pattern.direction === 'bullish' ? 'aboveBar' as const : 'belowBar' as const,
+      color: color,
+      shape: pattern.direction === 'bullish' ? 'arrowUp' as const : 'arrowDown' as const,
+      text: `${pattern.type} - ${pattern.confidence.toFixed(0)}%`
+    }
+
+    candlestickSeries.setMarkers([marker])
+    markersRef.current.push(marker)
+  }
+
+  const clearPatternVisualizations = () => {
+    if (!candlestickSeries) return
+
+    // Remove price lines
+    priceLinesRef.current.forEach(line => {
+      try {
+        candlestickSeries.removePriceLine(line)
+      } catch (e) {
+        // Line might already be removed
+      }
+    })
+    priceLinesRef.current = []
+
+    // Clear markers
+    candlestickSeries.setMarkers([])
+    markersRef.current = []
+  }
+
+  // Update chart when pattern selection changes
+  useEffect(() => {
+    if (selectedPattern) {
+      const pattern = detectedPatterns.find(p => p.id === selectedPattern)
+      if (pattern) {
+        drawPatternOnChart(pattern)
+      }
+    } else {
+      clearPatternVisualizations()
+    }
+
+    // Cleanup on unmount
+    return () => {
+      clearPatternVisualizations()
+    }
+  }, [selectedPattern, candlestickSeries])
+
+  // Cleanup when series changes
+  useEffect(() => {
+    clearPatternVisualizations()
+  }, [candlestickSeries])
 
   const getPatternIcon = (type: string) => {
     switch (type) {
@@ -195,6 +305,7 @@ export function PatternOverlay({ ticker, onPatternDetected }: PatternOverlayProp
                       <li>• {pattern.direction === 'bullish' ? 'Upward' : 'Downward'} momentum expected</li>
                       <li>• {pattern.confidence >= 0.8 ? 'High' : pattern.confidence >= 0.6 ? 'Medium' : 'Low'} confidence level</li>
                       <li>• {pattern.distance_to_breakout < 2 ? 'Close to breakout' : 'Formation in progress'}</li>
+                      <li>• Chart visualization active - support/resistance lines and breakout markers displayed</li>
                     </ul>
                   </div>
                 </div>
@@ -211,6 +322,7 @@ export function PatternOverlay({ ticker, onPatternDetected }: PatternOverlayProp
             <p>• Automatic pattern detection enabled</p>
             <p>• Confidence threshold: 60%</p>
             <p>• Real-time analysis active</p>
+            <p>• {candlestickSeries ? 'Chart visualization active' : 'Chart visualization not connected'}</p>
           </div>
           <Button variant="ghost" size="sm">
             Settings

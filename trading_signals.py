@@ -422,6 +422,7 @@ class TradingSignalGenerator:
                 final_action, kelly_fraction, correlation_risk, regime, risk_reward_valid
             )
 
+            # Create base enhanced signal
             enhanced_signal = {
                 **signal,
                 'risk_adjusted_score': risk_adjusted_score,
@@ -445,6 +446,9 @@ class TradingSignalGenerator:
                 'risk_recommendations': risk_recommendations,
                 'portfolio_heat_check': self._check_portfolio_heat(capital)
             }
+
+            # Apply ADX enhancement for advanced trend analysis
+            enhanced_signal = self._enhance_with_adx_signals(ticker, enhanced_signal)
 
             enhanced_signals.append(enhanced_signal)
 
@@ -486,23 +490,131 @@ class TradingSignalGenerator:
             return sum(true_ranges) / len(true_ranges) if true_ranges else 0.0
 
     def _get_regime_multiplier(self, regime: str, action: str) -> float:
-        """Get multiplier based on market regime and action."""
+        """Get multiplier based on market regime and action with enhanced ADX filtering."""
+        # Enhanced regime multipliers with trend direction consideration
         multipliers = {
-            ('VERY_STRONG_TREND', 'STRONG BUY'): 1.3,
-            ('VERY_STRONG_TREND', 'BUY'): 1.2,
-            ('STRONG_TREND', 'STRONG BUY'): 1.2,
-            ('STRONG_TREND', 'BUY'): 1.1,
-            ('EMERGING_TREND', 'BUY'): 1.0,
+            # Very Strong Trend (ADX > 60) - Strong trend following
+            ('VERY_STRONG_TREND', 'STRONG BUY'): 1.4,
+            ('VERY_STRONG_TREND', 'BUY'): 1.3,
+            ('VERY_STRONG_TREND', 'SELL'): 0.5,  # Strongly avoid counter-trend
+
+            # Strong Trend (ADX 40-60) - Good trend following
+            ('STRONG_TREND', 'STRONG BUY'): 1.3,
+            ('STRONG_TREND', 'BUY'): 1.2,
+            ('STRONG_TREND', 'SELL'): 0.6,  # Avoid counter-trend
+
+            # Emerging Strong Trend (ADX 25-40) - Acceptable trend following
+            ('EMERGING_STRONG_TREND', 'STRONG BUY'): 1.1,
+            ('EMERGING_STRONG_TREND', 'BUY'): 1.0,
+            ('EMERGING_STRONG_TREND', 'SELL'): 0.8,
+
+            # Weak Trend (ADX 20-25) - Reduced confidence
             ('WEAK_TREND', 'BUY'): 0.9,
-            ('CONSOLIDATION', 'BUY'): 0.7,
-            ('CONSOLIDATION', 'SELL'): 0.7,
             ('WEAK_TREND', 'SELL'): 0.9,
-            ('EMERGING_TREND', 'SELL'): 1.0,
-            ('STRONG_TREND', 'SELL'): 1.1,
-            ('VERY_STRONG_TREND', 'SELL'): 1.2,
+            ('WEAK_TREND', 'STRONG BUY'): 0.8,  # Downgrade strong signals
+
+            # Consolidation (ADX < 20) - Range-bound, avoid directional bets
+            ('CONSOLIDATION', 'BUY'): 0.6,
+            ('CONSOLIDATION', 'SELL'): 0.6,
+            ('CONSOLIDATION', 'STRONG BUY'): 0.5,  # Significant downgrade
+            ('CONSOLIDATION', 'HOLD'): 1.2,  # Favor holding in consolidation
         }
 
         return multipliers.get((regime, action), 1.0)
+
+    def _enhance_with_adx_signals(self, ticker: str, base_signal: Dict) -> Dict:
+        """Enhance signal with ADX-based trend strength and direction analysis."""
+        if ticker not in self.price_history or len(self.price_history[ticker]) < 14:
+            return base_signal
+
+        try:
+            prices = [p['price'] for p in self.price_history[ticker]]
+            highs = [p.get('high', p['price']) for p in self.price_history[ticker]]
+            lows = [p.get('low', p['price']) for p in self.price_history[ticker]]
+
+            if len(prices) < 14:
+                return base_signal
+
+            # Create DataFrame for analysis
+            df = pd.DataFrame({
+                'close': prices,
+                'high': highs,
+                'low': lows
+            })
+
+            # Get regime analysis
+            regime_info = self.market_regime_detector.analyze_regime(df)
+            regime = regime_info.get('regime', 'UNKNOWN')
+            regime_strength = regime_info.get('strength', 0)
+
+            # Calculate ADX components if available
+            adx_value = regime_info.get('adx_value', 0)
+            di_plus = regime_info.get('di_plus', 0)
+            di_minus = regime_info.get('di_minus', 0)
+
+            # Enhanced signal strength based on ADX
+            adx_adjustment = 1.0
+            if adx_value > 0:
+                if adx_value > 60:  # Very strong trend
+                    adx_adjustment = 1.3
+                elif adx_value > 40:  # Strong trend
+                    adx_adjustment = 1.2
+                elif adx_value > 25:  # Emerging strong trend
+                    adx_adjustment = 1.1
+                elif adx_value < 20:  # Consolidation
+                    adx_adjustment = 0.7
+
+            # Trend direction confirmation (if DI data available)
+            trend_direction_boost = 1.0
+            if di_plus > di_minus and di_plus > 25:  # Bullish trend
+                if base_signal['action'] in ['BUY', 'STRONG BUY']:
+                    trend_direction_boost = 1.1
+            elif di_minus > di_plus and di_minus > 25:  # Bearish trend
+                if base_signal['action'] in ['SELL']:
+                    trend_direction_boost = 1.1
+
+            # Apply adjustments
+            enhanced_signal = base_signal.copy()
+            enhanced_signal['market_regime'] = regime
+            enhanced_signal['regime_strength'] = regime_strength
+            enhanced_signal['adx_value'] = adx_value
+            enhanced_signal['di_plus'] = di_plus
+            enhanced_signal['di_minus'] = di_minus
+            enhanced_signal['adx_adjustment'] = adx_adjustment
+            enhanced_signal['trend_direction_boost'] = trend_direction_boost
+
+            # Adjust scores
+            base_score = enhanced_signal.get('overall_score', 0)
+            adjusted_score = base_score * adx_adjustment * trend_direction_boost
+            enhanced_signal['adx_enhanced_score'] = adjusted_score
+
+            # Enhanced position sizing based on ADX
+            if 'kelly_fraction' in enhanced_signal:
+                # Reduce Kelly in weak trends/consolidation
+                if regime in ['CONSOLIDATION', 'WEAK_TREND']:
+                    enhanced_signal['kelly_fraction'] *= 0.8
+                # Increase Kelly in strong trends
+                elif regime in ['VERY_STRONG_TREND', 'STRONG_TREND']:
+                    enhanced_signal['kelly_fraction'] *= 1.1
+
+            # Enhanced stop loss based on ADX
+            if 'stop_loss' in enhanced_signal:
+                current_price = enhanced_signal['current_price']
+                atr = self._calculate_atr(ticker)
+
+                # Tighter stops in strong trends, wider stops in consolidation
+                if regime in ['VERY_STRONG_TREND', 'STRONG_TREND']:
+                    enhanced_signal['adx_adjusted_stop_loss'] = current_price - (atr * 1.5)  # Tighter
+                elif regime in ['CONSOLIDATION']:
+                    enhanced_signal['adx_adjusted_stop_loss'] = current_price - (atr * 2.5)  # Wider
+                else:
+                    enhanced_signal['adx_adjusted_stop_loss'] = enhanced_signal['stop_loss']
+
+            return enhanced_signal
+
+        except Exception as e:
+            print(f"⚠️ Error enhancing {ticker} with ADX signals: {e}")
+            return base_signal
 
     def _determine_final_action(self, base_action: str, score: float, risk_reward_valid: bool,
                               high_correlation: bool, regime: str, risk_profile: str) -> str:
@@ -621,27 +733,33 @@ class TradingSignalGenerator:
             print("-" * 110)
             for signal in buy_signals[:5]:  # Top 5
                 action_emoji = "🚀" if signal['risk_adjusted_action'] == 'STRONG BUY' else "📈"
+                adx_score = signal.get('adx_enhanced_score', signal['risk_adjusted_score'])
+                adx_value = signal.get('adx_value', 0)
                 print(f"{action_emoji} {signal['ticker']:<8} | {signal['current_price']:>8.2f} PLN | "
-                      f"Score: {signal['risk_adjusted_score']:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
-                      f"RR: {signal['risk_reward_ratio']:.1f} | Regime: {signal['market_regime'][:4]} | "
+                      f"Score: {adx_score:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
+                      f"ADX: {adx_value:>4.0f} | RR: {signal['risk_reward_ratio']:.1f} | "
                       f"{signal['name'][:25]}")
 
         if hold_signals:
             print(f"\n🟡 RISK-ADJUSTED HOLD SIGNALS ({len(hold_signals)}):")
             print("-" * 110)
             for signal in hold_signals[:3]:  # Top 3
+                adx_score = signal.get('adx_enhanced_score', signal['risk_adjusted_score'])
+                adx_value = signal.get('adx_value', 0)
                 print(f"⏸️  {signal['ticker']:<8} | {signal['current_price']:>8.2f} PLN | "
-                      f"Score: {signal['risk_adjusted_score']:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
-                      f"RR: {signal['risk_reward_ratio']:.1f} | Regime: {signal['market_regime'][:4]} | "
+                      f"Score: {adx_score:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
+                      f"ADX: {adx_value:>4.0f} | RR: {signal['risk_reward_ratio']:.1f} | "
                       f"{signal['name'][:25]}")
 
         if sell_signals:
             print(f"\n🔴 RISK-ADJUSTED SELL SIGNALS ({len(sell_signals)}):")
             print("-" * 110)
             for signal in sell_signals[:3]:  # Top 3
+                adx_score = signal.get('adx_enhanced_score', signal['risk_adjusted_score'])
+                adx_value = signal.get('adx_value', 0)
                 print(f"📉 {signal['ticker']:<8} | {signal['current_price']:>8.2f} PLN | "
-                      f"Score: {signal['risk_adjusted_score']:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
-                      f"RR: {signal['risk_reward_ratio']:.1f} | Regime: {signal['market_regime'][:4]} | "
+                      f"Score: {adx_score:>6.1f} | Kelly: {signal['kelly_fraction']:.2%} | "
+                      f"ADX: {adx_value:>4.0f} | RR: {signal['risk_reward_ratio']:.1f} | "
                       f"{signal['name'][:25]}")
 
         # Detailed analysis for top signal

@@ -11,12 +11,23 @@ import threading
 import time
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import pandas as pd
-from config import ACTIVE_INDEX, ROE_THRESHOLD, PE_THRESHOLD, ENABLE_DUAL_FILTER
+from config import ACTIVE_INDEX, ROE_THRESHOLD, PE_THRESHOLD, ENABLE_DUAL_FILTER, WIG30_TICKERS, WIG20_TICKERS
 from trading_chart_service import chart_service
 
 app = Flask(__name__)
+
+# Configure CORS for frontend
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3001", "http://127.0.0.1:3001"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global variables to store latest analysis
@@ -31,8 +42,10 @@ def load_latest_analysis():
         # Load the complete analysis with all companies
         if ACTIVE_INDEX == 'WIG20':
             csv_file = 'wig20_analysis.csv'
+            current_index_tickers = set(WIG20_TICKERS)
         else:
             csv_file = 'wig30_analysis.csv'
+            current_index_tickers = set(WIG30_TICKERS)
 
         if os.path.exists(csv_file):
             df = pd.read_csv(csv_file)
@@ -41,11 +54,32 @@ def load_latest_analysis():
             df['decision'] = df.apply(lambda row: make_investment_decision(row), axis=1)
             df['decision_color'] = df.apply(lambda row: get_decision_color(row), axis=1)
 
+            # Add index information for each stock
+            df['index'] = df['ticker'].apply(lambda ticker:
+                'WIG20' if ticker in WIG20_TICKERS else
+                'WIG30' if ticker in WIG30_TICKERS else
+                'OTHER'
+            )
+
+            all_stocks = df.to_dict('records')
+
+            # Filter by current index
+            filtered_stocks = [stock for stock in all_stocks if stock['ticker'] in current_index_tickers]
+
             latest_analysis = {
-                'all_stocks': df.to_dict('records'),
-                'count': len(df),
+                'all_stocks': all_stocks,
+                'filtered_stocks': filtered_stocks,
+                'count': len(all_stocks),
+                'filtered_count': len(filtered_stocks),
                 'recommendations': df[df['decision'] == 'KUP'].to_dict('records'),
+                'filtered_recommendations': [stock for stock in df[df['decision'] == 'KUP'].to_dict('records')
+                                           if stock['ticker'] in current_index_tickers],
                 'index': ACTIVE_INDEX,
+                'available_indices': ['WIG30', 'WIG20'],
+                'index_stock_counts': {
+                    'WIG30': len([t for t in all_stocks if t['ticker'] in WIG30_TICKERS]),
+                    'WIG20': len([t for t in all_stocks if t['ticker'] in WIG20_TICKERS])
+                },
                 'thresholds': {
                     'roe': ROE_THRESHOLD,
                     'pe': PE_THRESHOLD,
@@ -132,6 +166,27 @@ def get_analysis():
         if not load_latest_analysis():
             return jsonify({'error': 'No analysis data available'}), 404
 
+    # Get requested index from query parameter
+    requested_index = request.args.get('index', ACTIVE_INDEX)
+
+    # If a specific index is requested, filter the data
+    if requested_index in ['WIG30', 'WIG20'] and requested_index != ACTIVE_INDEX:
+        # Filter stocks for requested index
+        index_tickers = WIG30_TICKERS if requested_index == 'WIG30' else WIG20_TICKERS
+        filtered_stocks = [stock for stock in latest_analysis['all_stocks']
+                          if stock['ticker'] in index_tickers]
+        filtered_recommendations = [stock for stock in latest_analysis['recommendations']
+                                  if stock['ticker'] in index_tickers]
+
+        analysis_copy = latest_analysis.copy()
+        analysis_copy.update({
+            'filtered_stocks': filtered_stocks,
+            'filtered_recommendations': filtered_recommendations,
+            'filtered_count': len(filtered_stocks),
+            'index': requested_index
+        })
+        return jsonify(analysis_copy)
+
     return jsonify(latest_analysis)
 
 @app.route('/api/all_stocks')
@@ -178,6 +233,18 @@ def get_status():
         }
     })
 
+@app.route('/api/indices')
+def get_indices():
+    """Get available indices and their stock counts"""
+    return jsonify({
+        'available_indices': ['WIG30', 'WIG20'],
+        'active_index': ACTIVE_INDEX,
+        'wig30_stocks': WIG30_TICKERS,
+        'wig20_stocks': WIG20_TICKERS,
+        'wig30_count': len(WIG30_TICKERS),
+        'wig20_count': len(WIG20_TICKERS)
+    })
+
 @app.route('/api/config', methods=['GET', 'POST'])
 def handle_config():
     """Get or update configuration"""
@@ -186,7 +253,8 @@ def handle_config():
             'active_index': ACTIVE_INDEX,
             'roe_threshold': ROE_THRESHOLD,
             'pe_threshold': PE_THRESHOLD,
-            'dual_filter': ENABLE_DUAL_FILTER
+            'dual_filter': ENABLE_DUAL_FILTER,
+            'available_indices': ['WIG30', 'WIG20']
         })
     else:
         # Note: This would require modifying config.py dynamically
@@ -247,6 +315,268 @@ def get_indicators(ticker):
             return jsonify({'error': f'No data available for {ticker}'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Watchlist management endpoints
+@app.route('/api/watchlist', methods=['GET', 'POST', 'DELETE'])
+def manage_watchlist():
+    """Manage watchlist - GET, POST, DELETE"""
+    import json
+
+    WATCHLIST_FILE = 'watchlist.json'
+
+    def load_watchlist():
+        """Load watchlist from file"""
+        try:
+            if os.path.exists(WATCHLIST_FILE):
+                with open(WATCHLIST_FILE, 'r') as f:
+                    return json.load(f)
+            return []
+        except Exception as e:
+            print(f"Error loading watchlist: {e}")
+            return []
+
+    def save_watchlist(watchlist):
+        """Save watchlist to file"""
+        try:
+            with open(WATCHLIST_FILE, 'w') as f:
+                json.dump(watchlist, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error saving watchlist: {e}")
+            return False
+
+    if request.method == 'GET':
+        """Get current watchlist with stock data"""
+        watchlist = load_watchlist()
+        watchlist_data = []
+
+        for ticker in watchlist:
+            try:
+                data = chart_service.get_stock_data(ticker, '1d')
+                if data and data.get('info'):
+                    watchlist_data.append({
+                        'ticker': ticker,
+                        'name': data['info'].get('name', ticker),
+                        'price': data['info'].get('current_price', 0),
+                        'change': data['info'].get('change', 0),
+                        'change_percent': data['info'].get('change_percent', 0),
+                        'volume': data['info'].get('volume', 0)
+                    })
+            except Exception as e:
+                print(f"Error fetching data for {ticker}: {e}")
+                # Add ticker with placeholder data if fetch fails
+                watchlist_data.append({
+                    'ticker': ticker,
+                    'name': ticker,
+                    'price': 0,
+                    'change': 0,
+                    'change_percent': 0,
+                    'volume': 0,
+                    'error': True
+                })
+
+        return jsonify({
+            'watchlist': watchlist_data,
+            'count': len(watchlist_data)
+        })
+
+    elif request.method == 'POST':
+        """Add ticker to watchlist"""
+        data = request.get_json()
+        ticker = data.get('ticker', '').upper().strip()
+
+        if not ticker:
+            return jsonify({'error': 'Ticker is required'}), 400
+
+        watchlist = load_watchlist()
+
+        if ticker not in watchlist:
+            watchlist.append(ticker)
+            if save_watchlist(watchlist):
+                return jsonify({
+                    'success': True,
+                    'message': f'{ticker} added to watchlist',
+                    'watchlist': watchlist
+                })
+            else:
+                return jsonify({'error': 'Failed to save watchlist'}), 500
+        else:
+            return jsonify({'message': f'{ticker} already in watchlist'})
+
+    elif request.method == 'DELETE':
+        """Remove ticker from watchlist"""
+        data = request.get_json()
+        ticker = data.get('ticker', '').upper().strip()
+
+        if not ticker:
+            return jsonify({'error': 'Ticker is required'}), 400
+
+        watchlist = load_watchlist()
+
+        if ticker in watchlist:
+            watchlist.remove(ticker)
+            if save_watchlist(watchlist):
+                return jsonify({
+                    'success': True,
+                    'message': f'{ticker} removed from watchlist',
+                    'watchlist': watchlist
+                })
+            else:
+                return jsonify({'error': 'Failed to save watchlist'}), 500
+        else:
+            return jsonify({'error': f'{ticker} not in watchlist'}), 404
+
+@app.route('/api/watchlist/search')
+def search_watchlist_stocks():
+    """Search for stocks to add to watchlist"""
+    query = request.args.get('q', '').strip().upper()
+
+    if not query or len(query) < 2:
+        return jsonify({'error': 'Query must be at least 2 characters'}), 400
+
+    try:
+        # Search in both WIG30 and WIG20 tickers
+        all_tickers = WIG30_TICKERS + WIG20_TICKERS
+        matches = []
+
+        for ticker in all_tickers:
+            if query in ticker:
+                matches.append(ticker)
+
+        # Get basic data for matches
+        results = []
+        for ticker in matches[:10]:  # Limit to 10 results
+            try:
+                data = chart_service.get_stock_data(ticker, '1d')
+                if data and data.get('info'):
+                    results.append({
+                        'ticker': ticker,
+                        'name': data['info'].get('name', ticker),
+                        'price': data['info'].get('current_price', 0),
+                        'change': data['info'].get('change', 0),
+                        'change_percent': data['info'].get('change_percent', 0)
+                    })
+            except Exception as e:
+                print(f"Error fetching data for {ticker}: {e}")
+                results.append({
+                    'ticker': ticker,
+                    'name': ticker,
+                    'price': 0,
+                    'change': 0,
+                    'change_percent': 0,
+                    'error': True
+                })
+
+        return jsonify({
+            'query': query,
+            'results': results,
+            'count': len(results)
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Professional Charts API endpoints
+@app.route('/api/charts/<ticker>/<chart_type>')
+def get_professional_chart(ticker, chart_type):
+    """Get professional chart configuration for a stock"""
+    import advanced_charts
+    import json
+    import os
+
+    try:
+        # Get stock data
+        data = chart_service.get_stock_data(ticker, '1y')
+        if not data or not data.get('data'):
+            return jsonify({'error': f'No data available for {ticker}'}), 404
+
+        # Convert to DataFrame
+        df = pd.DataFrame(data['data'])
+        df.index = pd.to_datetime(df.index)
+
+        # Generate professional chart based on type
+        chart_config = None
+
+        if chart_type == 'candlestick':
+            chart_config = advanced_charts.generate_candlestick_chart(
+                ticker, data.get('info', {}).get('name', ticker), df
+            )
+        elif chart_type == 'rsi':
+            chart_config = advanced_charts.generate_rsi_chart(ticker, df)
+        elif chart_type == 'macd':
+            chart_config = advanced_charts.generate_macd_chart(ticker, df)
+        elif chart_type == 'volume':
+            chart_config = advanced_charts.generate_volume_chart(ticker, df)
+        else:
+            return jsonify({'error': f'Invalid chart type: {chart_type}'}), 400
+
+        if chart_config:
+            return jsonify(chart_config)
+        else:
+            return jsonify({'error': f'Failed to generate {chart_type} chart'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/charts/<ticker>')
+def get_all_charts(ticker):
+    """Get all professional charts for a stock"""
+    try:
+        # Get stock data
+        data = chart_service.get_stock_data(ticker, '1y')
+        if not data or not data.get('data'):
+            return jsonify({'error': f'No data available for {ticker}'}), 404
+
+        # Convert to DataFrame
+        df = pd.DataFrame(data['data'])
+        df.index = pd.to_datetime(df.index)
+
+        # Get technical indicators
+        chart_data = chart_service.get_chart_data(ticker, '1y', ['SMA_20', 'RSI_14', 'MACD'])
+
+        # Generate all professional charts
+        import advanced_charts
+        charts = advanced_charts.generate_comprehensive_chart_package(
+            ticker,
+            data.get('info', {}).get('name', ticker),
+            df,
+            chart_data.get('indicators', {}).get('SMA_20', {}).get('values', [None, None, None, None])[-1] if chart_data.get('indicators', {}).get('SMA_20') else None,
+            chart_data.get('indicators', {}).get('SMA_10', {}).get('values', [None, None, None, None])[-1] if chart_data.get('indicators', {}).get('SMA_10') else None,
+            chart_data.get('indicators', {}).get('SMA_5', {}).get('values', [None, None, None, None])[-1] if chart_data.get('indicators', {}).get('SMA_5') else None,
+            chart_data.get('trend', 'Boczny')
+        )
+
+        return jsonify({
+            'ticker': ticker,
+            'company_name': data.get('info', {}).get('name', ticker),
+            'charts': charts,
+            'chart_types': ['candlestick', 'rsi', 'macd', 'volume']
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# System configuration for radar-wig.pl
+@app.route('/api/system/config')
+def get_system_config():
+    """Get system configuration for frontend"""
+    return jsonify({
+        'site_name': 'GPW Smart Analyzer',
+        'domain': 'radar-wig.pl',
+        'version': '2.0.0',
+        'features': {
+            'professional_charts': True,
+            'watchlist': True,
+            'realtime_data': True,
+            'technical_indicators': ['SMA', 'RSI', 'MACD', 'Bollinger Bands', 'ADX'],
+            'supported_indices': ['WIG30', 'WIG20']
+        },
+        'theme': {
+            'mode': 'dark',
+            'primary_color': '#1e1e1e',
+            'style': 'tradingview'
+        }
+    })
 
 # WebSocket event handlers
 @socketio.on('connect')
@@ -345,4 +675,4 @@ if __name__ == '__main__':
     print("🌐 Dashboard available at: http://localhost:5000")
     print("=" * 50)
 
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
