@@ -1,0 +1,74 @@
+[
+  {
+    "ticker": "MBK.WA",
+    "name": "mBank S.A.",
+    "current_price": 902.0,
+    "market_cap": 38771122176,
+    "currency": "PLN",
+    "analysis_date": "2025-10-17T10:32:01.006524",
+    "fundamental": {
+      "net_income": 3223927040,
+      "total_revenue": 12170444800,
+      "roe": 0.18897,
+      "pe_ratio": 7.673983,
+      "pb_ratio": 2.129508,
+      "debt_to_equity": 0,
+      "current_ratio": 0,
+      "gross_margin": 0.0,
+      "operating_margin": 0.63237,
+      "net_margin": 0.2649,
+      "roa": 0.013250001,
+      "roic": 0,
+      "data_quality": {
+        "completeness": 1.0,
+        "freshness": 1.0,
+        "overall_score": 1.0
+      },
+      "profitable": true,
+      "meets_roe_criteria": false,
+      "meets_pe_criteria": true,
+      "meets_pb_criteria": true,
+      "meets_debt_criteria": true,
+      "meets_liquidity_criteria": false
+    },
+    "technical": {
+      "ma": {
+        "ma_5": 922.360009765625,
+        "ma_10": 924.3600036621094,
+        "ma_20": 913.2799987792969
+      },
+      "rsi": 50.56306314046542,
+      "macd": {},
+      "bollinger_bands": {
+        "upper": 951.0802365610544,
+        "middle": 913.2799987792969,
+        "lower": 875.4797609975393
+      },
+      "trend": {
+        "direction": "sideways",
+        "strength": 0.5,
+        "current_vs_ma20": -1.2351084874708615
+      },
+      "volume": {
+        "recent_avg": 12303.4,
+        "overall_avg": 17749.782608695652,
+        "ratio": 0.693157785153523,
+        "trend": "decreasing"
+      },
+      "volatility": 0.3091744587246261,
+      "price_momentum": -3.010752688172043
+    },
+    "future_score": 63,
+    "future_factors": [
+      "Sektor bankowy",
+      "Stabilizacja",
+      "Rekomendacje: DM BOŚ",
+      "RSI w zakresie",
+      "Przychody wzrostowe",
+      "Atrakcyjna wycena"
+    ],
+    "sector": "Sektor bankowy",
+    "reliability_score": 60,
+    "recommendation": "BUY",
+    "historical_prices": {
+      

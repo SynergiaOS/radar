@@ -1,0 +1,249 @@
+# CodeRabbit AI Code Review Configuration
+# cr-574f802af30a5bea03ed8cc71ed3292099f6e98c957975e8aa4154590a
+
+# Language settings
+language: pl
+review:
+  # Code review settings
+  auto_review: true
+  auto_fix: true
+  auto_merge: false
+  require_pr_approval: true
+
+  # Review focus areas
+  focus_on:
+    - security
+    - performance
+    - best_practices
+    - maintainability
+    - documentation
+    - testing
+
+  # File patterns to review
+  include:
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.json"
+    - "**/*.yml"
+    - "**/*.yaml"
+
+  # Files to exclude
+  exclude:
+    - "node_modules/**"
+    - "venv/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - "build/**"
+    - "dist/**"
+    - "*.min.js"
+    - "*.min.css"
+    - "*.map"
+    - "coverage/**"
+    - ".pytest_cache/**"
+
+# Security scanning
+security:
+  enabled: true
+  scan_secrets: true
+  scan_dependencies: true
+  vulnerability_scanner: true
+
+# Code quality checks
+quality:
+  enabled: true
+  check_complexity: true
+  check_duplication: true
+  check_coverage: true
+  min_coverage: 80
+
+  # Complexity thresholds
+  max_complexity:
+    py: 10
+    js: 15
+    ts: 15
+
+  # Duplication threshold
+  duplication_threshold: 5
+
+# Documentation
+documentation:
+  enabled: true
+  require_docstrings: true
+  require_readme: true
+  require_api_docs: true
+
+# Testing
+testing:
+  enabled: true
+  run_tests: true
+  min_test_coverage: 75
+
+  # Test frameworks
+  frameworks:
+    py: pytest
+    js: jest
+    ts: jest
+
+# Custom rules for Python
+python:
+  # PEP 8 compliance
+  pep8: true
+  max_line_length: 127
+  use_black: true
+  use_isort: true
+
+  # Type checking
+  mypy: true
+  strict_types: true
+
+  # Security
+  bandit: true
+  safety: true
+
+# Custom rules for JavaScript/TypeScript
+javascript:
+  eslint: true
+  prettier: true
+  max_line_length: 120
+
+  # Security
+  eslint_security: true
+  npm_audit: true
+
+# Custom rules for WIG30 project specific
+wig30_project:
+  # Polish language support in code comments
+  allow_polish_comments: true
+
+  # Financial data handling security
+  secure_financial_data: true
+
+  # Real-time data processing
+  real_time_processing: true
+
+  # Chart rendering security
+  secure_chart_rendering: true
+
+# Integration with development tools
+integrations:
+  github: true
+  gitlab: true
+  slack: false
+  email: false
+
+# AI Model Settings
+ai_model:
+  temperature: 0.3
+  max_tokens: 2000
+  model: "gpt-4"
+
+# Feedback settings
+feedback:
+  auto_generate: true
+  include_suggestions: true
+  include_explanations: true
+
+  # Polish language feedback
+  language: pl
+  translation_enabled: true
+
+# Reporting
+reporting:
+  generate_summary: true
+  include_metrics: true
+  export_format: "markdown"
+
+  # Polish report headers
+  headers:
+    summary: "Podsumowanie Kodu"
+    issues: "Wykryte Problemy"
+    suggestions: "Sugestie Ulepszeń"
+    metrics: "Metryki Jakości"
+
+# Custom WIG30 specific rules
+wig30_rules:
+  # Must validate financial data
+  validate_financial_data: true
+
+  # Must check for SQL injection in database queries
+  check_sql_injection: true
+
+  # Must validate API endpoints
+  validate_api_endpoints: true
+
+  # Must check for XSS in user inputs
+  check_xss_protection: true
+
+  # Must validate chart data processing
+  validate_chart_processing: true
+
+  # Must check for sensitive data exposure
+  check_data_exposure: true
+
+# Performance settings
+performance:
+  enabled: true
+  check_performance_issues: true
+  max_response_time: 5000
+  max_memory_usage: 512
+
+  # Check for slow database queries
+  check_slow_queries: true
+  max_query_time: 1000
+
+  # Check for memory leaks
+  check_memory_leaks: true
+
+# Refactoring suggestions
+refactoring:
+  enabled: true
+  suggest_improvements: true
+  suggest_renames: true
+  suggest_restructures: true
+
+  # Polish language refactoring suggestions
+  suggest_polish_improvements: true
+
+# Code formatting
+formatting:
+  enabled: true
+  auto_format: true
+
+  python:
+    use_black: true
+    line_length: 127
+    string_quotes: "double"
+
+  javascript:
+    use_prettier: true
+    line_length: 120
+    semicolons: true
+
+# Review history
+review_history:
+  store_reviews: true
+  max_history_days: 30
+  track_improvements: true
+
+# Team collaboration
+team:
+  assign_reviewers: true
+  require_multiple_reviews: false
+  reviewer_rotation: true
+
+  # Polish team settings
+  team_language: pl
+  time_zone: "Europe/Warsaw"
+
+# Notifications
+notifications:
+  slack: false
+  email: false
+  github: true
+
+  # Polish notification messages
+  language: pl
+  use_emojis: true

@@ -1,0 +1,147 @@
+{
+        "data": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          58.123,
+          57.8,
+          56.2,
+          55.1,
+          54.0,
+          53.2,
+          52.1,
+          51.0,
+          50.5,
+          49.9,
+          49.4,
+          48.7,
+          47.9,
+          47.1,
+          46.5,
+          45.9,
+          45.0,
+          44.2
+        ],
+    ],
+    "datasets": [
+      {
+        "label": "RSI",
+        "data": [
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          NaN,
+          53.17919075144508,
+          49.46236559139785,
+          46.285714285714285,
+          47.093023255813954,
+          56.707317073170735,
+          47.91666666666667,
+          51.36986301369863,
+          50.69444444444444,
+          48.026315789473685,
+          36.13861386138614,
+          38.775510204081634,
+          37.17277486910995,
+          28.143712574850298,
+          30.12820512820514,
+          31.446540880503136,
+          56.75675675675676,
+          49.122807017543856
+        ],
+        "borderColor": "#00bcd4",
+        "backgroundColor": "#00bcd420",
+        "borderWidth": 2,
+        "pointRadius": 1,
+        "tension": 0.1
+      }
+    ]
+  },
+  "options": {
+    "responsive": true,
+    "maintainAspectRatio": false,
+    "backgroundColor": "#1e1e1e",
+    "plugins": {
+      "annotation": {
+        "annotations": {
+          "overbought": {
+            "type": "line",
+            "yMin": 70,
+            "yMax": 70,
+            "borderColor": "#ff5252",
+            "borderWidth": 2,
+            "borderDash": [
+              5,
+              5
+            ],
+            "label": {
+              "content": "Overbought (70)",
+              "enabled": true,
+              "position": "end"
+            }
+          },
+          "oversold": {
+            "type": "line",
+            "yMin": 30,
+            "yMax": 30,
+            "borderColor": "#00c853",
+            "borderWidth": 2,
+            "borderDash": [
+              5,
+              5
+            ],
+            "label": {
+              "content": "Oversold (30)",
+              "enabled": true,
+              "position": "end"
+            }
+          }
+        }
+      }
+    },
+    "scales": {
+      "x": {
+        "grid": {
+          "color": "#2a2a2a"
+        },
+        "ticks": {
+          "color": "#d1d4dc"
+        }
+      },
+      "y": {
+        "min": 0,
+        "max": 100,
+        "grid": {
+          "color": "#2a2a2a"
+        },
+        "ticks": {
+          "color": "#d1d4dc"
+        },
+        "title": {
+          "display": true,
+          "text": "RSI",
+          "color": "#d1d4dc"
+        }
+      }
+    }
+  }
+}

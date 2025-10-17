@@ -1,0 +1,90 @@
+name: CodeRabbit AI Code Review
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+
+jobs:
+  coderabbit-review:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install CodeRabbit CLI
+      run: |
+        pip install coderabbit-cli
+        coderabbit --version
+
+    - name: Run CodeRabbit review
+      run: |
+        coderabbit review \
+          --token=${{secrets.CODERABBIT_TOKEN}} \
+          --repo=${{github.repository}} \
+          --pr=${{github.event.number}} \
+          --language=pl \
+          --auto-fix \
+          --format=markdown \
+          --output=review-summary.md
+
+    - name: Post review comment
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+
+          if (fs.existsSync('review-summary.md')) {
+            const reviewSummary = fs.readFileSync('review-summary.md', 'utf8');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## 🤖 CodeRabbit AI Code Review\n\n${reviewSummary}`
+            });
+          }
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload review artifacts
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coderabbit-review
+        path: |
+          review-summary.md
+          coderabbit-report.json
+        retention-days: 30
+
+  security-scan:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run security scan with CodeRabbit
+      run: |
+        pip install coderabbit-cli
+        coderabbit security-scan \
+          --token=${{secrets.CODERABBIT_TOKEN}} \
+          --repo=${{github.repository}} \
+          --format=sarif \
+          --output=security-results.sarif
+
+    - name: Upload security results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: security-results.sarif

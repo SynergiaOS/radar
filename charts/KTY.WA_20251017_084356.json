@@ -1,0 +1,261 @@
+{
+  "type": "line",
+  "data": {
+    "labels": [
+      "2025-09-05",
+      "2025-09-08",
+      "2025-09-09",
+      "2025-09-10",
+      "2025-09-11",
+      "2025-09-12",
+      "2025-09-15",
+      "2025-09-16",
+      "2025-09-17",
+      "2025-09-18",
+      "2025-09-19",
+      "2025-09-22",
+      "2025-09-23",
+      "2025-09-24",
+      "2025-09-25",
+      "2025-09-26",
+      "2025-09-29",
+      "2025-09-30",
+      "2025-10-01",
+      "2025-10-02",
+      "2025-10-03",
+      "2025-10-06",
+      "2025-10-07",
+      "2025-10-08",
+      "2025-10-09",
+      "2025-10-10",
+      "2025-10-13",
+      "2025-10-14",
+      "2025-10-15",
+      "2025-10-16"
+    ],
+    "datasets": [
+      {
+        "label": "Cena zamknięcia",
+        "data": [
+          916.0,
+          928.5,
+          922.0,
+          912.0,
+          924.0,
+          922.0,
+          925.0,
+          917.0,
+          915.0,
+          910.5,
+          916.5,
+          928.5,
+          921.0,
+          921.5,
+          915.0,
+          922.0,
+          917.0,
+          923.0,
+          921.0,
+          924.0,
+          926.0,
+          914.0,
+          887.0,
+          888.5,
+          892.0,
+          892.0,
+          890.0,
+          892.0,
+          930.0,
+          920.0
+        ],
+        "borderColor": "#1E3A8A",
+        "backgroundColor": "#1E3A8A20",
+        "borderWidth": 2,
+        "pointRadius": 1,
+        "pointHoverRadius": 5,
+        "tension": 0.1
+      },
+      {
+        "label": "MA5",
+        "data": [
+          null,
+          null,
+          null,
+          null,
+          920.5,
+          921.7,
+          921.0,
+          920.0,
+          920.6,
+          917.9,
+          916.8,
+          917.5,
+          918.3,
+          919.6,
+          920.5,
+          921.6,
+          919.3,
+          919.7,
+          919.6,
+          921.4,
+          922.2,
+          921.6,
+          914.4,
+          907.9,
+          901.5,
+          894.7,
+          889.9,
+          890.9,
+          899.2,
+          904.8
+        ],
+        "borderColor": "#22C55E",
+        "backgroundColor": "#22C55E20",
+        "borderWidth": 2,
+        "pointRadius": 0,
+        "pointHoverRadius": 4,
+        "tension": 0.1
+      },
+      {
+        "label": "MA10",
+        "data": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          919.2,
+          919.25,
+          919.25,
+          919.15,
+          920.1,
+          919.2,
+          919.2,
+          918.4,
+          919.0,
+          919.6,
+          920.95,
+          921.9,
+          920.45,
+          917.05,
+          913.75,
+          911.45,
+          908.45,
+          905.75,
+          902.65,
+          903.55,
+          903.15
+        ],
+        "borderColor": "#F97316",
+        "backgroundColor": "#F9731620",
+        "borderWidth": 2,
+        "pointRadius": 0,
+        "pointHoverRadius": 4,
+        "tension": 0.1
+      },
+      {
+        "label": "MA20",
+        "data": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          920.075,
+          920.575,
+          919.85,
+          918.1,
+          916.925,
+          915.325,
+          913.825,
+          912.075,
+          910.825,
+          911.575,
+          912.05
+        ],
+        "borderColor": "#EF4444",
+        "backgroundColor": "#EF444420",
+        "borderWidth": 2,
+        "pointRadius": 0,
+        "pointHoverRadius": 4,
+        "tension": 0.1
+      }
+    ]
+  },
+  "options": {
+    "responsive": true,
+    "maintainAspectRatio": false,
+    "plugins": {
+      "title": {
+        "display": true,
+        "text": "Grupa Kety S.A. (KTY.WA) - Trend: Boczny",
+        "font": {
+          "size": 16,
+          "weight": "bold"
+        }
+      },
+      "legend": {
+        "display": true,
+        "position": "top"
+      },
+      "tooltip": {
+        "mode": "index",
+        "intersect": false,
+        "callbacks": {
+          "label": {
+            "type": "function",
+            "body": "return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' PLN';"
+          }
+        }
+      }
+    },
+    "scales": {
+      "x": {
+        "display": true,
+        "title": {
+          "display": true,
+          "text": "Data"
+        },
+        "ticks": {
+          "maxTicksLimit": 10
+        }
+      },
+      "y": {
+        "display": true,
+        "title": {
+          "display": true,
+          "text": "Cena (PLN)"
+        },
+        "ticks": {
+          "callback": {
+            "type": "function",
+            "body": "return value.toFixed(2) + ' PLN';"
+          }
+        }
+      }
+    },
+    "interaction": {
+      "mode": "nearest",
+      "axis": "x",
+      "intersect": false
+    }
+  }
+}

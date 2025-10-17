@@ -1,0 +1,17 @@
+{
+  "analysis_date": "2025-10-17T10:33:29.743504",
+  "index": "WIG30",
+  "total_analyzed": 3,
+  "future_stocks_count": 2,
+  "top_10": [
+    "MBK.WA",
+    "PKN.WA"
+  ],
+  "average_future_score": 55.333333333333336,
+  "analysis_duration_seconds": 3.022367,
+  "config": {
+    "roe_threshold": 10.0,
+    "pe_threshold": 20.0,
+    "pb_threshold": 3.0
+  }
+}

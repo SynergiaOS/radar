@@ -161,3 +161,4 @@ Thumbs.db
 
 # Configuration files with credentials
 xtb_config.json
+node_modules

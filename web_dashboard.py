@@ -14,6 +14,7 @@ from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import pandas as pd
+import numpy as np
 from config import ACTIVE_INDEX, ROE_THRESHOLD, PE_THRESHOLD, ENABLE_DUAL_FILTER, WIG30_TICKERS, WIG20_TICKERS
 from trading_chart_service import chart_service
 
@@ -33,6 +34,24 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Global variables to store latest analysis
 latest_analysis = None
 last_update = None
+
+def clean_nan_values(obj):
+    """Recursively clean NaN values from data structures, replacing with None"""
+    if isinstance(obj, dict):
+        return {k: clean_nan_values(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan_values(item) for item in obj]
+    elif isinstance(obj, np.ndarray):
+        return clean_nan_values(obj.tolist())
+    elif pd.isna(obj):
+        return None
+    else:
+        return obj
+
+def safe_jsonify(data):
+    """Safe JSON response that handles NaN values"""
+    cleaned_data = clean_nan_values(data)
+    return jsonify(cleaned_data)
 
 def load_latest_analysis():
     """Load the latest analysis results from CSV files"""
@@ -185,9 +204,9 @@ def get_analysis():
             'filtered_count': len(filtered_stocks),
             'index': requested_index
         })
-        return jsonify(analysis_copy)
+        return safe_jsonify(analysis_copy)
 
-    return jsonify(latest_analysis)
+    return safe_jsonify(latest_analysis)
 
 @app.route('/api/all_stocks')
 def get_all_stocks():
@@ -196,7 +215,7 @@ def get_all_stocks():
         if not load_latest_analysis():
             return jsonify({'error': 'No analysis data available'}), 404
 
-    return jsonify({
+    return safe_jsonify({
         'stocks': latest_analysis['all_stocks'],
         'count': latest_analysis['count'],
         'timestamp': latest_analysis['timestamp']
@@ -208,7 +227,7 @@ def run_new_analysis():
     success, message = run_analysis()
 
     if success:
-        return jsonify({
+        return safe_jsonify({
             'success': True,
             'message': message,
             'data': latest_analysis
@@ -222,7 +241,7 @@ def run_new_analysis():
 @app.route('/api/status')
 def get_status():
     """API endpoint to get system status"""
-    return jsonify({
+    return safe_jsonify({
         'last_update': last_update.isoformat() if last_update else None,
         'active_index': ACTIVE_INDEX,
         'recommendations_count': len(latest_analysis['recommendations']) if latest_analysis else 0,
@@ -236,7 +255,7 @@ def get_status():
 @app.route('/api/indices')
 def get_indices():
     """Get available indices and their stock counts"""
-    return jsonify({
+    return safe_jsonify({
         'available_indices': ['WIG30', 'WIG20'],
         'active_index': ACTIVE_INDEX,
         'wig30_stocks': WIG30_TICKERS,
@@ -249,7 +268,7 @@ def get_indices():
 def handle_config():
     """Get or update configuration"""
     if request.method == 'GET':
-        return jsonify({
+        return safe_jsonify({
             'active_index': ACTIVE_INDEX,
             'roe_threshold': ROE_THRESHOLD,
             'pe_threshold': PE_THRESHOLD,
@@ -271,7 +290,7 @@ def get_chart_data(ticker):
         data = chart_service.get_stock_data(ticker, period)
         if data:
             formatted_data = chart_service.format_chart_data(data, indicators)
-            return jsonify(formatted_data)
+            return safe_jsonify(formatted_data)
         else:
             return jsonify({'error': f'No data available for {ticker}'}), 404
     except Exception as e:
@@ -288,7 +307,7 @@ def compare_stocks():
             return jsonify({'error': 'No tickers provided'}), 400
 
         data = chart_service.get_multiple_stocks_data(tickers, period)
-        return jsonify(data)
+        return safe_jsonify(data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -301,7 +320,7 @@ def get_indicators(ticker):
             df = pd.DataFrame(data['data'])
             latest = df.iloc[-1]
 
-            return jsonify({
+            return safe_jsonify({
                 'ticker': ticker,
                 'price': float(latest['Close']),
                 'rsi': float(latest.get('RSI_14', 0)) if pd.notna(latest.get('RSI_14')) else None,
@@ -511,7 +530,7 @@ def get_professional_chart(ticker, chart_type):
             return jsonify({'error': f'Invalid chart type: {chart_type}'}), 400
 
         if chart_config:
-            return jsonify(chart_config)
+            return safe_jsonify(chart_config)
         else:
             return jsonify({'error': f'Failed to generate {chart_type} chart'}), 500
 
@@ -546,7 +565,7 @@ def get_all_charts(ticker):
             chart_data.get('trend', 'Boczny')
         )
 
-        return jsonify({
+        return safe_jsonify({
             'ticker': ticker,
             'company_name': data.get('info', {}).get('name', ticker),
             'charts': charts,
@@ -560,7 +579,7 @@ def get_all_charts(ticker):
 @app.route('/api/system/config')
 def get_system_config():
     """Get system configuration for frontend"""
-    return jsonify({
+    return safe_jsonify({
         'site_name': 'GPW Smart Analyzer',
         'domain': 'radar-wig.pl',
         'version': '2.0.0',

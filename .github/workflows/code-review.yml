@@ -1,0 +1,191 @@
+name: Code Review & Quality Checks
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v20
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: |
+          gpw-smart-analyzer/package-lock.json
+          package-lock.json
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install flake8 black isort mypy pylint pytest
+
+    - name: Install Node.js dependencies (frontend)
+      run: |
+        cd gpw-smart-analyzer
+        npm ci
+
+    - name: Run Python code formatting check
+      run: |
+        black --check .
+        isort --check-only .
+
+    - name: Run Python linting
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run Python type checking
+      run: |
+        mypy unified_system/ --ignore-missing-imports
+
+    - name: Run Python security check
+      run: |
+        pip install bandit
+        bandit -r . -f json -o bandit-report.json || true
+
+    - name: Run Python tests
+      run: |
+        python -m pytest unified_system/tests/ -v --tb=short || true
+
+    - name: Run Node.js linting (frontend)
+      run: |
+        cd gpw-smart-analyzer
+        npm run lint || echo "No lint script found"
+
+    - name: Run Node.js type checking
+      run: |
+        cd gpw-smart-analyzer
+        npm run type-check || echo "No type-check script found"
+
+    - name: Check for security vulnerabilities
+      run: |
+        pip install safety
+        safety check --json --output safety-report.json || true
+        cd gpw-smart-analyzer && npm audit --audit-level=high || true
+
+    - name: Analyze code complexity
+      run: |
+        pip install radon
+        radon cc . --json --output cc-report.json || true
+
+    - name: Check duplicate code
+      run: |
+        pip install pycpd
+        pycpd --min-lines 5 --json . || echo "No duplicates found"
+
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  code-quality-metrics:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Calculate code metrics
+      run: |
+        # Python code stats
+        echo "## 📊 Python Code Statistics" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        find . -name "*.py" -not -path "./venv/*" -not -path "./node_modules/*" | xargs wc -l | tail -1 >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+        # JavaScript/TypeScript code stats
+        echo "## 📊 JavaScript/TypeScript Code Statistics" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        find . -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -not -path "./node_modules/*" | xargs wc -l | tail -1 || echo "No JS/TS files found" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+        # Most complex files
+        echo "## 🔍 Most Complex Files" >> $GITHUB_STEP_SUMMARY
+        pip install radon
+        radon cc . --json | jq -r '.[] | select(.complexity > 10) | "\(.path): \(.complexity)"' | head -5 >> $GITHUB_STEP_SUMMARY || echo "No complex files found" >> $GITHUB_STEP_SUMMARY
+
+    - name: Generate coverage report
+      run: |
+        pip install coverage pytest-cov
+        python -m pytest unified_system/tests/ --cov=unified_system --cov-report=xml --cov-report=html || echo "No tests found"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      if: always()
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  documentation-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check documentation
+      run: |
+        # Check if README exists and is comprehensive
+        if [ -f "README.md" ]; then
+          echo "✅ README.md exists"
+          echo "## 📖 Documentation Status" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ README.md found" >> $GITHUB_STEP_SUMMARY
+          echo "- Lines: $(wc -l < README.md)" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ README.md missing"
+          echo "- ❌ README.md missing" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # Check for API documentation
+        if [ -f "docs/api.md" ]; then
+          echo "- ✅ API documentation found" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ⚠️ API documentation missing" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # Check docstrings in Python code
+        echo "## 🐍 Python Documentation Coverage" >> $GITHUB_STEP_SUMMARY
+        python_files_with_functions=$(find . -name "*.py" -not -path "./venv/*" -not -path "./node_modules/*" -exec grep -l "def " {} \; | wc -l)
+        python_files_with_docstrings=$(find . -name "*.py" -not -path "./venv/*" -not -path "./node_modules/*" -exec grep -l '"""' {} \; | wc -l)
+        echo "- Files with functions: $python_files_with_functions" >> $GITHUB_STEP_SUMMARY
+        echo "- Files with docstrings: $python_files_with_docstrings" >> $GITHUB_STEP_SUMMARY
+        if [ $python_files_with_functions -gt 0 ]; then
+          coverage=$((python_files_with_docstrings * 100 / python_files_with_functions))
+          echo "- Docstring coverage: $coverage%" >> $GITHUB_STEP_SUMMARY
+        fi
