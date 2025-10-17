@@ -417,6 +417,34 @@ class RiskManager:
         return recommendations
 
 
+def get_sector_for_ticker(ticker: str) -> str:
+    """
+    Get sector name for a given ticker.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., 'PKN.WA')
+
+    Returns:
+        Sector name or 'Other' if not found
+    """
+    sector_correlations = {
+        'banking': ['PKO.WA', 'PEO.WA', 'SPL.WA', 'MBK.WA', 'BZWB.WA'],
+        'energy': ['PKN.WA', 'PGE.WA', 'TPE.WA', 'KGH.WA', 'JSW.WA'],
+        'telecom': ['CPS.WA', 'OPL.WA'],
+        'insurance': ['PZU.WA', 'ALR.WA'],
+        'retail': ['LPP.WA', 'CCC.WA'],
+        'technology': ['CDR.WA', 'TXT.WA', '11B.WA'],
+        'finance': ['XTB.WA', 'KTY.WA'],
+        'industrial': ['KRU.WA', 'SNT.WA', 'RBW.WA']
+    }
+
+    for sector, tickers in sector_correlations.items():
+        if ticker in tickers:
+            return sector.capitalize()
+
+    return 'Other'
+
+
 # Utility functions for standalone usage
 def calculate_kelly_position_size(capital: float, win_rate: float, avg_win: float,
                               avg_loss: float, kelly_fraction: float = 0.25) -> float:

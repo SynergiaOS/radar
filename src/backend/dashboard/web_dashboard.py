@@ -15,8 +15,10 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import pandas as pd
 import numpy as np
-from config import ACTIVE_INDEX, ROE_THRESHOLD, PE_THRESHOLD, ENABLE_DUAL_FILTER, WIG30_TICKERS, WIG20_TICKERS
-from trading_chart_service import chart_service
+from src.config.config import ACTIVE_INDEX, ROE_THRESHOLD, PE_THRESHOLD, ENABLE_DUAL_FILTER, WIG30_TICKERS, WIG20_TICKERS
+from src.services.integrations.trading_chart_service import chart_service
+import yfinance as yf
+from src.backend.analysis.technical_analysis import analyze_technical_indicators, calculate_rsi, detect_trend, get_trend_label
 
 app = Flask(__name__)
 
@@ -153,7 +155,7 @@ def run_analysis():
     try:
         # Run the bot directly (already in virtual environment)
         result = subprocess.run(
-            ['python', 'wig30_bot.py'],
+            ['python', 'src/backend/trading/wig30_bot.py'],
             capture_output=True,
             text=True,
             timeout=120  # 2 minutes timeout
@@ -335,6 +337,101 @@ def get_indicators(ticker):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def get_enriched_stock_data(ticker: str) -> dict:
+    """
+    Get enriched stock data with technical indicators and sector information.
+
+    Args:
+        ticker: Stock ticker symbol
+
+    Returns:
+        Dictionary with comprehensive stock data
+    """
+    try:
+        # Get basic stock data
+        data = chart_service.get_stock_data(ticker, '1d')
+        if not data or not data.get('data'):
+            return {'error': f'No data available for {ticker}'}
+
+        # Convert to DataFrame
+        df = pd.DataFrame(data['data'])
+
+        # Get additional yfinance data for market cap and volume
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        # Get technical indicators
+        indicators = analyze_technical_indicators(df)
+        trend_result = detect_trend(df)
+
+        # Calculate RSI
+        rsi = calculate_rsi(df['Close'], 14)
+
+        # Get sector
+        sector = get_sector_for_ticker(ticker)
+
+        # Get latest data
+        latest = df.iloc[-1]
+
+        # Map trend to English
+        trend_map = {
+            'Wzrostowy': 'upward',
+            'Spadkowy': 'downward',
+            'Boczny': 'sideways',
+            'Nieznany': 'unknown'
+        }
+
+        return {
+            'ticker': ticker,
+            'name': data['info'].get('name', ticker),
+            'price': float(latest['Close']),
+            'change': float(latest['Close'] - latest['Open']),
+            'change_percent': float(((latest['Close'] - latest['Open']) / latest['Open']) * 100),
+            'volume': int(latest['Volume']) if pd.notna(latest.get('Volume')) else 0,
+            'market_cap': info.get('marketCap'),
+            'sector': sector,
+            'rsi': float(rsi) if pd.notna(rsi) else None,
+            'macd': float(indicators.get('macd', {}).get('values', [0, 0, 0, 0])[-1]) if indicators.get('macd') else None,
+            'macd_signal': float(indicators.get('macd_signal', {}).get('values', [0, 0, 0, 0])[-1]) if indicators.get('macd_signal') else None,
+            'trend': trend_map.get(get_trend_label(df), 'unknown'),
+            'trend_label': get_trend_label(df),
+            'sma5': float(indicators.get('sma5', {}).get('values', [0, 0, 0, 0])[-1]) if indicators.get('sma5') else None,
+            'sma10': float(indicators.get('sma10', {}).get('values', [0, 0, 0, 0])[-1]) if indicators.get('sma10') else None,
+            'sma20': float(indicators.get('sma20', {}).get('values', [0, 0, 0, 0])[-1]) if indicators.get('sma20') else None,
+            'timestamp': datetime.now().isoformat()
+        }
+    except Exception as e:
+        print(f"Error getting enriched data for {ticker}: {e}")
+        return {
+            'ticker': ticker,
+            'name': ticker,
+            'price': 0,
+            'change': 0,
+            'change_percent': 0,
+            'volume': 0,
+            'market_cap': None,
+            'sector': None,
+            'rsi': None,
+            'macd': None,
+            'macd_signal': None,
+            'trend': 'unknown',
+            'trend_label': 'Nieznany',
+            'sma5': None,
+            'sma10': None,
+            'sma20': None,
+            'timestamp': datetime.now().isoformat(),
+            'error': True
+        }
+
+def get_sector_for_ticker(ticker: str) -> str:
+    """
+    Get sector name for a given ticker.
+
+    Delegates to risk_management module for consistency.
+    """
+    from src.core.risk_management import get_sector_for_ticker as risk_get_sector
+    return risk_get_sector(ticker)
+
 # Watchlist management endpoints
 @app.route('/api/watchlist', methods=['GET', 'POST', 'DELETE'])
 def manage_watchlist():
@@ -499,7 +596,7 @@ def search_watchlist_stocks():
 @app.route('/api/charts/<ticker>/<chart_type>')
 def get_professional_chart(ticker, chart_type):
     """Get professional chart configuration for a stock"""
-    import advanced_charts
+    from src.utils.advanced_charts import generate_candlestick_chart, generate_rsi_chart, generate_macd_chart, generate_volume_chart
     import json
     import os
 
@@ -517,15 +614,15 @@ def get_professional_chart(ticker, chart_type):
         chart_config = None
 
         if chart_type == 'candlestick':
-            chart_config = advanced_charts.generate_candlestick_chart(
+            chart_config = generate_candlestick_chart(
                 ticker, data.get('info', {}).get('name', ticker), df
             )
         elif chart_type == 'rsi':
-            chart_config = advanced_charts.generate_rsi_chart(ticker, df)
+            chart_config = generate_rsi_chart(ticker, df)
         elif chart_type == 'macd':
-            chart_config = advanced_charts.generate_macd_chart(ticker, df)
+            chart_config = generate_macd_chart(ticker, df)
         elif chart_type == 'volume':
-            chart_config = advanced_charts.generate_volume_chart(ticker, df)
+            chart_config = generate_volume_chart(ticker, df)
         else:
             return jsonify({'error': f'Invalid chart type: {chart_type}'}), 400
 
@@ -554,8 +651,8 @@ def get_all_charts(ticker):
         chart_data = chart_service.get_chart_data(ticker, '1y', ['SMA_20', 'RSI_14', 'MACD'])
 
         # Generate all professional charts
-        import advanced_charts
-        charts = advanced_charts.generate_comprehensive_chart_package(
+        from src.utils.advanced_charts import generate_comprehensive_chart_package
+        charts = generate_comprehensive_chart_package(
             ticker,
             data.get('info', {}).get('name', ticker),
             df,
@@ -646,30 +743,46 @@ def start_price_monitoring():
         app.monitoring_active = True
         print("Price monitoring started")
 
+        # Track previous prices for conditional updates
+        previous_prices = {}
+
         while app.monitoring_active:
             try:
                 # Check if any ticker is being monitored
                 if hasattr(app, 'ticker_subscriptions'):
-                    for ticker, is_active in app.ticker_subscriptions.items():
-                        if is_active:
-                            # Fetch latest price data
-                            data = chart_service.get_stock_data(ticker, '1d')
-                            if data and data.get('info'):
-                                latest_price = data['info']['current_price']
-                                change = data['info']['change']
-                                change_percent = data['info']['change_percent']
+                    batch_updates = []
+                    active_tickers = [t for t, active in app.ticker_subscriptions.items() if active]
 
-                                # Broadcast price update to subscribers
-                                room = f'ticker_{ticker}'
-                                socketio.emit('price_update', {
-                                    'ticker': ticker,
-                                    'price': latest_price,
-                                    'change': change,
-                                    'change_percent': change_percent,
-                                    'timestamp': datetime.now().isoformat()
-                                }, room=room)
+                    for ticker in active_tickers:
+                        # Get enriched stock data
+                        enriched_data = get_enriched_stock_data(ticker)
 
-                                print(f"Price update for {ticker}: {latest_price} ({change_percent:+.2f}%)")
+                        if 'error' not in enriched_data:
+                            # Check if this is the first update or if change is significant (>0.5%)
+                            current_price = enriched_data['price']
+                            change_percent = enriched_data['change_percent']
+
+                            should_update = (
+                                ticker not in previous_prices or  # First update
+                                abs(change_percent) > 0.5 or  # Significant change
+                                enriched_data.get('trend') != 'sideways'  # Trend change
+                            )
+
+                            if should_update:
+                                batch_updates.append(enriched_data)
+                                previous_prices[ticker] = current_price
+                                print(f"Batch update for {ticker}: {current_price:.2f} ({change_percent:+.2f}%)")
+
+                        # Small delay between tickers to avoid rate limiting
+                        time.sleep(0.1)
+
+                    # Emit batch update if we have any
+                    if batch_updates:
+                        socketio.emit('price_update', {
+                            'updates': batch_updates,
+                            'timestamp': datetime.now().isoformat()
+                        })  # Broadcast to all (no room parameter)
+                        print(f"Emitted batch update with {len(batch_updates)} stocks")
 
                 # Wait before next update (30 seconds)
                 time.sleep(30)

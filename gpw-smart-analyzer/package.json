@@ -29,6 +29,7 @@
     "@tanstack/react-query-devtools": "^5.90.2",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "chartjs-chart-financial": "^0.2.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",
@@ -41,6 +42,7 @@
     "react-hotkeys-hook": "^4.5.0",
     "react-use-websocket": "^4.9.0",
     "recharts": "^2.12.0",
+    "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.0",
     "zustand": "^4.5.0"
   },

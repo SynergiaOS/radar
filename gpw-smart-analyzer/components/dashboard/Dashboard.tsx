@@ -22,6 +22,7 @@ import { useAnalysis, useRunAnalysis, useSystemStatus } from '@/lib/hooks/useAna
 import { useStockData } from '@/lib/hooks/useStockData'
 import { TradingChart } from '@/components/charts/TradingChart'
 import { WatchlistManager } from '@/components/watchlist/WatchlistManager'
+import { RealtimeTable } from '@/components/watchlist/RealtimeTable'
 import { RefreshCw, TrendingUp, TrendingDown, Minus, Play, Pause, Settings, Search, Star } from 'lucide-react'
 import Link from 'next/link'
 
@@ -29,6 +30,7 @@ export function Dashboard() {
   const [selectedTicker, setSelectedTicker] = useState('XTB.WA')
   const [isMonitoring, setIsMonitoring] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState<'WIG30' | 'WIG20'>('WIG30')
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
 
   const { data: analysis, isLoading: analysisLoading } = useAnalysis(selectedIndex)
   const { data: status, isLoading: statusLoading } = useSystemStatus()
@@ -112,16 +114,47 @@ export function Dashboard() {
           </div>
         </div>
 
+        {/* View Mode Toggle */}
+        <div className="px-4 py-2 border-b border-gray-700">
+          <div className="flex items-center space-x-2">
+            <Button
+              variant={viewMode === 'cards' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('cards')}
+              className="flex-1"
+            >
+              Cards
+            </Button>
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+              className="flex-1"
+            >
+              Table
+            </Button>
+          </div>
+        </div>
+
         {/* Enhanced Watchlist */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Watchlist Manager */}
+          {/* Watchlist Manager or RealtimeTable */}
           <div className="flex-1 overflow-hidden">
-            <div className="p-4 h-full">
-              <WatchlistManager
-                onStockSelect={setSelectedTicker}
-                className="h-full"
-              />
-            </div>
+            {viewMode === 'cards' ? (
+              <div className="p-4 h-full">
+                <WatchlistManager
+                  onStockSelect={setSelectedTicker}
+                  className="h-full"
+                />
+              </div>
+            ) : (
+              <div className="h-full">
+                <RealtimeTable
+                  onRowClick={setSelectedTicker}
+                  className="h-full"
+                />
+              </div>
+            )}
           </div>
 
           {/* Market Overview */}

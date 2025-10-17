@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TrendingUp, TrendingDown, BarChart3, Activity, Settings } from 'lucide-react'
 import { useStockData } from '@/lib/hooks/useStockData'
 import { ProfessionalChart } from './ProfessionalChart'
+import { PKNChart } from './PKNChart'
 
 interface TradingChartProps {
   ticker: string
@@ -18,7 +19,7 @@ interface TradingChartProps {
 }
 
 export function TradingChart({ ticker, period = '1y', className, onReady }: TradingChartProps) {
-  const [chartMode, setChartMode] = useState<'lightweight' | 'professional'>('professional')
+  const [chartMode, setChartMode] = useState<'lightweight' | 'professional' | 'pkn-tradingview'>('professional')
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -211,6 +212,64 @@ export function TradingChart({ ticker, period = '1y', className, onReady }: Trad
     )
   }
 
+  // Special PKN TradingView chart
+  if (ticker === 'PKN.WA' && chartMode === 'pkn-tradingview') {
+    return (
+      <div className={`tv-chart-container ${className}`}>
+        {/* TradingView-style toolbar for PKN */}
+        <div className="tv-toolbar">
+          <div className="flex items-center space-x-2">
+            <span className="text-white font-medium">{ticker}</span>
+            <span className="text-gray-400 text-sm">{stockData.info?.name || 'PKN Orlen'}</span>
+            <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-400">
+              TradingView Analysis
+            </Badge>
+          </div>
+
+          <div className="flex items-center space-x-2 ml-auto">
+            <Tabs value={chartMode} onValueChange={(value: any) => setChartMode(value)} className="w-auto">
+              <TabsList className="bg-gray-800 border border-gray-700 h-8">
+                {ticker === 'PKN.WA' && (
+                  <TabsTrigger
+                    value="pkn-tradingview"
+                    className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-yellow-600 data-[state=active]:text-white"
+                  >
+                    <TrendingUp className="h-3 w-3" />
+                    <span className="hidden sm:inline">PKN TV</span>
+                  </TabsTrigger>
+                )}
+                <TabsTrigger
+                  value="professional"
+                  className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                >
+                  <BarChart3 className="h-3 w-3" />
+                  <span className="hidden sm:inline">Pro</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="lightweight"
+                  className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                >
+                  <Activity className="h-3 w-3" />
+                  <span className="hidden sm:inline">Basic</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="border-l border-gray-600 h-4 mx-2"></div>
+
+            <button className="tv-toolbar-button">1D</button>
+            <button className="tv-toolbar-button">1W</button>
+            <button className="tv-toolbar-button bg-blue-600 text-white">1M</button>
+            <button className="tv-toolbar-button">ALL</button>
+          </div>
+        </div>
+
+        {/* PKN TradingView Chart Component */}
+        <PKNChart />
+      </div>
+    )
+  }
+
   if (chartMode === 'professional') {
     return (
       <div className={`tv-chart-container ${className}`}>
@@ -227,6 +286,15 @@ export function TradingChart({ ticker, period = '1y', className, onReady }: Trad
           <div className="flex items-center space-x-2 ml-auto">
             <Tabs value={chartMode} onValueChange={(value: any) => setChartMode(value)} className="w-auto">
               <TabsList className="bg-gray-800 border border-gray-700 h-8">
+                {ticker === 'PKN.WA' && (
+                  <TabsTrigger
+                    value="pkn-tradingview"
+                    className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-yellow-600 data-[state=active]:text-white"
+                  >
+                    <TrendingUp className="h-3 w-3" />
+                    <span className="hidden sm:inline">PKN TV</span>
+                  </TabsTrigger>
+                )}
                 <TabsTrigger
                   value="professional"
                   className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"
@@ -279,6 +347,15 @@ export function TradingChart({ ticker, period = '1y', className, onReady }: Trad
         <div className="flex items-center space-x-2 ml-auto">
           <Tabs value={chartMode} onValueChange={(value: any) => setChartMode(value)} className="w-auto">
             <TabsList className="bg-gray-800 border border-gray-700 h-8">
+              {ticker === 'PKN.WA' && (
+                <TabsTrigger
+                  value="pkn-tradingview"
+                  className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-yellow-600 data-[state=active]:text-white"
+                >
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="hidden sm:inline">PKN TV</span>
+                </TabsTrigger>
+              )}
               <TabsTrigger
                 value="professional"
                 className="flex items-center space-x-1 h-6 px-3 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white"

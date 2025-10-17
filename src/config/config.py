@@ -153,3 +153,9 @@ CHART_COLORS = {
 # Updated Output Filenames
 OUTPUT_CSV_FILE = 'wig30_analysis_cqg_ma_viz.csv'
 WIG20_OUTPUT_CSV_FILE = 'wig20_analysis_cqg_ma_viz.csv'
+
+# Realtime Update Optimization Configuration
+REALTIME_UPDATE_INTERVAL = 30  # seconds - WebSocket update frequency
+REALTIME_CHANGE_THRESHOLD = 0.5  # percent - only emit updates if change > 0.5%
+REALTIME_BATCH_ENABLED = True  # Enable batch processing of updates
+REALTIME_MAX_HISTORY = 100  # Maximum data points to keep in memory

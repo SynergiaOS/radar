@@ -76,3 +76,36 @@ export interface ComparisonData {
     prices: { x: number; y: number }[]
   }
 }
+
+export interface RealtimeTableRow {
+  ticker: string
+  name: string
+  price: number
+  change: number
+  change_percent: number
+  volume: number
+  market_cap: number | null
+  sector: string | null
+  rsi: number | null
+  macd: number | null
+  macd_signal: number | null
+  trend: 'upward' | 'downward' | 'sideways' | 'unknown'
+  trend_label: string  // Polish: 'Wzrostowy', 'Spadkowy', 'Boczny'
+  sma5: number | null
+  sma10: number | null
+  sma20: number | null
+  timestamp: string
+  error?: boolean
+  priceFlash?: 'up' | 'down' | null  // For animation
+}
+
+export interface RealtimeTableData {
+  stocks: RealtimeTableRow[]
+  count: number
+  timestamp: string
+}
+
+export interface RealtimeBatchUpdate {
+  updates: RealtimeTableRow[]
+  timestamp: string
+}
